@@ -14,12 +14,14 @@ module Mb_app =
 let main_service =
   Eliom_service.App.service ~path:[] ~get_params:Eliom_parameter.unit ()
 
+let setup_services () =
+  ignore(Mb_app.register_service ["insert_fb_event"] Eliom_parameter.unit Insert.insert_service);
+  ignore(Mb_app.register_service ["promote_fb_event"] Eliom_parameter.unit View.view_service)
+
 let () =
-  ignore(Mb_app.register_service ["inserttest"] Eliom_parameter.unit Insert.insert_service);
-  let make_div att = div ~a:[a_id att] [] in
-  let my_head = (head (title (pcdata "Hello World of Ocsigen")) []) in
-  let all_divs = [make_div "fb-root"] in
-  let my_body = (body all_divs) in
+  let () = setup_services () in
+  let my_head = (head (title (pcdata "Manage band")) []) in
+  let my_body = (body [Utils.fb_root_div]) in
   Mb_app.register
     ~service:main_service
     (fun () () ->

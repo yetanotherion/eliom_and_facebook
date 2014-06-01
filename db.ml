@@ -32,6 +32,11 @@ let make_event event_db =
         start_date = event_db#!start_date;
       }
 
+let get_events () =
+  lwt dbh = get_db () in
+  lwt events = Lwt_Query.query dbh <:select< r | r in $events$ >> in
+  Lwt.return (List.map make_event events)
+
 let get_event url =
   lwt dbh = get_db () in
   match_lwt (Lwt_Query.query dbh

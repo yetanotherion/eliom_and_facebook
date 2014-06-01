@@ -27,11 +27,10 @@ let insert_service unused unused2 =
                    let url_input = Js.to_string (Js.Unsafe.coerce url_input_dom)##value in
                    try_lwt
                      lwt res = Utils.lwt_api_event url_input in
-                 Utils.process_event_answer url_input button_dom %span_elt to_insert res (*647147472010945*)
-               with x -> (Html5.Manip.replaceChildren
-%span_elt
-[div [pcdata (Printf.sprintf "Invalid event %s" (Printexc.to_string x))]];
-                          Lwt.return ())
+                     Utils.process_event_answer url_input res %span_elt ~button:(Some button_dom) ~to_insert:(Some to_insert) (*647147472010945*)
+                   with x -> (Html5.Manip.replaceChildren %span_elt
+                                [div [pcdata (Printf.sprintf "Invalid event %s" (Printexc.to_string x))]];
+                              Lwt.return ())
         ));
         clicks button_dom
           (fun _ _ ->
@@ -62,4 +61,4 @@ let insert_service unused unused2 =
                       ["css"; "mb.css"]]
                 ~js:[["js"; "jquery.min.js"];
                      ["js"; "bootstrap.min.js"]]
-                (body [url_input; button; span_elt]))
+                (body [Utils.fb_root_div; url_input; button; span_elt]))

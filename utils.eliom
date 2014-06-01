@@ -9,6 +9,8 @@
   }
 }}
 
+let fb_root_div = div ~a:[a_id "fb_root"] []
+
 {client{
   module Html = Dom_html
   let offset = (jsnew Js.date_now ())##getTimezoneOffset()
@@ -82,12 +84,13 @@
     Fb.api_event url f;
     api
 
-  let handle_correct_api_res api_res new_span =
-    [li [pcdata (Printf.sprintf "Name: %s" api_res.Fb.name)];
-     li [pcdata (Printf.sprintf "Owner: %s" api_res.Fb.owner.Fb.name)];
-     li [pcdata (Printf.sprintf "Location: %s" api_res.Fb.venue.Fb.city)];
-     li [pcdata (Printf.sprintf "Start_time: %s" api_res.Fb.start_time)];
-     new_span]
+  let print_event event wait_msg_spans =
+    let tds = [td [pcdata (Printf.sprintf "Name: %s" event.Fb.name)];
+               td [pcdata (Printf.sprintf "Owner: %s" event.Fb.owner.Fb.name)];
+               td [pcdata (Printf.sprintf "Location: %s" event.Fb.venue.Fb.city)];
+               td [pcdata (Printf.sprintf "Start_time: %s" event.Fb.start_time)]]
+              @ (List.map (fun x -> td [x]) wait_msg_spans) in
+    tr tds
 
   let hidde_button elt =
     if not (Js.to_bool (elt##classList##contains(Js.string "hidden")))
@@ -118,11 +121,12 @@
             let next_param = substring_after_char x '?' in
             gather_all_users (Printf.sprintf "%s?%s" url next_param) new_res
 
-  let process_rsvp url attending =
-    let attending_url = url ^ "/" ^ attending in
-    gather_all_users attending_url []
+  let process_rsvp url users_name wait_span =
+    lwt all_users = gather_all_users (url ^ "/" ^ users_name) [] in
+    Html5.Manip.replaceChildren wait_span [pcdata (Printf.sprintf "#%s:: %d" users_name (List.length all_users))];
+    Lwt.return all_users
 
-  let process_event_answer url button_dom dynamic_param_board to_insert res =
+  let process_event_answer url res dynamic_param_board ~button ~to_insert =
     lwt to_replace =
       match res with
         | Fb.Nok error -> begin
@@ -132,20 +136,19 @@
           Lwt.return ([div [pcdata (Printf.sprintf "Invalid event, got data instead of event elements")]])
         end
         | Fb.Ok api_res -> begin
-          let new_span  = span [pcdata ("wait as we gather attending users...")] in
-          let to_replace = handle_correct_api_res api_res new_span in
+          let make_span name =
+            span [pcdata (Printf.sprintf "wait as we gather %s users..." name)]
+          in
+          let attending_span = make_span "attending" in
+          let declined_span = make_span "declined" in
+          let invited_span = make_span "invited" in
+          let to_replace = [table (print_event api_res [attending_span; declined_span; invited_span]) []] in
           Html5.Manip.replaceChildren dynamic_param_board to_replace;
-          lwt attending = process_rsvp url "attending" in
-          lwt declined = process_rsvp url "declined" in
-          lwt invited = try_lwt process_rsvp url "invited" with _ -> Lwt.return [] in
-          show_button button_dom;
-          to_insert := Some (url, api_res.Fb.venue.Fb.city, api_res.Fb.start_time);
-          let res = [
-            li [pcdata (Printf.sprintf "#Attending:: %d" (List.length attending))];
-            li [pcdata (Printf.sprintf "#Declined:: %d" (List.length declined))];
-            li [pcdata (Printf.sprintf "#Invited:: %s" (match invited with | [] -> "Too many" | l -> Printf.sprintf "%d" (List.length invited)))]
-          ] in
-          Html5.Manip.replaceChildren new_span res;
+          lwt attending = process_rsvp url "attending" attending_span in
+          lwt declined = process_rsvp url "declined" declined_span in
+          lwt invited = try_lwt process_rsvp url "invited" invited_span with _ -> Lwt.return [] in
+          let () = match button with | Some b -> show_button b | None -> () in
+          let () = match to_insert with | Some x -> x := Some (url, api_res.Fb.venue.Fb.city, api_res.Fb.start_time) | None -> () in
           Lwt.return to_replace
         end
     in
