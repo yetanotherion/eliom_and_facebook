@@ -51,9 +51,11 @@ let view_service unused unused2 =
 
   }}
   in
+
   Lwt.return (Eliom_tools.D.html ~title: "advertise your event"
                 ~css:[["css"; "bootstrap.min.css"];
                       ["css"; "mb.css"]]
                 ~js:[["js"; "jquery.min.js"];
                      ["js"; "bootstrap.min.js"]]
-                (body [Utils.fb_root_div; url_input; span_elt]))
+                (body [Utils.fb_root_div; url_input; span_elt])
+                ~other_head:Utils.bootstrap_metas)

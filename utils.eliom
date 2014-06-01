@@ -11,7 +11,11 @@
 }}
 
 let fb_root_div = div ~a:[a_id "fb-root"] []
-
+let bootstrap_metas = [meta ~a:[a_charset "utf8"] ();
+                       meta ~a:[a_http_equiv "X-UA-Compatible";
+                                 a_content "IE=edge"] ();
+                       meta ~a:[a_name "viewport";
+                                a_content "width=device-width, initial-scale=1"] () ]
 {client{
   type event_user = String.t * String.t
   let extract_user user = (user.Fb.user_id, user.Fb.name)

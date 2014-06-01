@@ -11,8 +11,11 @@ let rpc_insert_url =
   server_function Json.t<(string * string * string)> my_insert
 
 let insert_service unused unused2 =
-  let url_input = string_input ~input_type:`Text () in
-  let button = button ~a:[a_class ["hidden"]] ~button_type:`Button [pcdata "record_in_db"] in
+  let url_input = string_input ~a:[a_class ["form-control"];
+                                   a_autofocus `Autofocus]
+    ~input_type:`Text () in
+  let text_over_input = h2 ~a:[a_class ["form-signin-heading"]] [pcdata "Enter event's id"] in
+  let button = button ~a:[a_class ["hidden"; "btn"; "btn-primary"]] ~button_type:`Button [pcdata "Record"] in
   let span_elt = span [] in
   let _ = {unit{
     let button_dom = Html5.To_dom.of_element %button in
@@ -65,7 +68,11 @@ let insert_service unused unused2 =
   in
   Lwt.return (Eliom_tools.D.html ~title: "insert an url"
                 ~css:[["css"; "bootstrap.min.css"];
-                      ["css"; "mb.css"]]
+                      ["css"; "mb.css"];
+                      ["css"; "signin.css"]]
                 ~js:[["js"; "jquery.min.js"];
                      ["js"; "bootstrap.min.js"]]
-                (body [Utils.fb_root_div; url_input; button; span_elt]))
+                (body [Utils.fb_root_div;
+                       div ~a:[a_class ["container"; "form-signin"]]
+                         [text_over_input; url_input; button; span_elt]])
+                ~other_head:Utils.bootstrap_metas)
