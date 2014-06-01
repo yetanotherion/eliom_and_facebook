@@ -10,7 +10,7 @@
 
 }}
 
-let fb_root_div = div ~a:[a_id "fb_root"] []
+let fb_root_div = div ~a:[a_id "fb-root"] []
 
 {client{
   type event_user = String.t * String.t
