@@ -14,7 +14,8 @@ let rpc_get_events =
   let process_event event span_element =
     try_lwt
       lwt res = Utils.lwt_api_event event.Utils.url in
-      Utils.process_event_answer event.Utils.url res span_element ~button:None ~to_insert:None
+      lwt unused = Utils.process_event_answer event.Utils.url res span_element in
+      Lwt.return_unit
     with x -> begin
       Html5.Manip.replaceChildren span_element
         [pcdata (Printf.sprintf "Invalid event %s" (Printexc.to_string x))];

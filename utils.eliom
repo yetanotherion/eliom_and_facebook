@@ -7,11 +7,29 @@
     location: string;
     start_date: Int32.t;
   }
+
 }}
 
 let fb_root_div = div ~a:[a_id "fb_root"] []
 
 {client{
+  type event_user = String.t * String.t
+  let extract_user user = (user.Fb.user_id, user.Fb.name)
+
+  type event_and_users = {
+    ev_data: Fb.correct_event_res;
+    attending: event_user list;
+    declined: event_user list;
+    invited: event_user list;
+  }
+
+  let make_event_and_users event attending declined invited =
+    { ev_data = event;
+      attending = attending;
+      declined = declined;
+      invited = invited;
+    }
+
   module Html = Dom_html
   let offset = (jsnew Js.date_now ())##getTimezoneOffset()
   let () = CalendarLib.Time_Zone.change (CalendarLib.Time_Zone.UTC_Plus ((-offset) / 60))
@@ -113,7 +131,7 @@ let fb_root_div = div ~a:[a_id "fb_root"] []
         raise_lwt (Failure "unexpected")
       end
       | Fb.Data (d, cursor) ->
-        let current_res = List.map (fun x -> (x.Fb.user_id, x.Fb.name)) (Array.to_list d) in
+        let current_res = List.map extract_user (Array.to_list d) in
         let new_res = res @ current_res in
         match cursor.Fb.next with
           | None -> Lwt.return new_res
@@ -126,14 +144,14 @@ let fb_root_div = div ~a:[a_id "fb_root"] []
     Html5.Manip.replaceChildren wait_span [pcdata (Printf.sprintf "#%s:: %d" users_name (List.length all_users))];
     Lwt.return all_users
 
-  let process_event_answer url res dynamic_param_board ~button ~to_insert =
-    lwt to_replace =
+  let process_event_answer url res dynamic_param_board =
+    lwt to_replace, result =
       match res with
         | Fb.Nok error -> begin
-          Lwt.return ([div [pcdata (Printf.sprintf "Invalid event, got error {message:%s, error_type: %s, code: %d}" error.Fb.message error.Fb.error_type error.Fb.code)]])
+          Lwt.return ([div [pcdata (Printf.sprintf "Invalid event, got error {message:%s, error_type: %s, code: %d}" error.Fb.message error.Fb.error_type error.Fb.code)]], None)
         end
         | Fb.Data _ -> begin
-          Lwt.return ([div [pcdata (Printf.sprintf "Invalid event, got data instead of event elements")]])
+          Lwt.return ([div [pcdata (Printf.sprintf "Invalid event, got data instead of event elements")]], None)
         end
         | Fb.Ok api_res -> begin
           let make_span name =
@@ -147,13 +165,11 @@ let fb_root_div = div ~a:[a_id "fb_root"] []
           lwt attending = process_rsvp url "attending" attending_span in
           lwt declined = process_rsvp url "declined" declined_span in
           lwt invited = try_lwt process_rsvp url "invited" invited_span with _ -> Lwt.return [] in
-          let () = match button with | Some b -> show_button b | None -> () in
-          let () = match to_insert with | Some x -> x := Some (url, api_res.Fb.venue.Fb.city, api_res.Fb.start_time) | None -> () in
-          Lwt.return to_replace
+          Lwt.return (to_replace, (Some (make_event_and_users api_res attending declined invited)))
         end
     in
     Html5.Manip.replaceChildren dynamic_param_board to_replace;
-    Lwt.return_unit
+    Lwt.return result
 
   let epoch_to_tz_date date =
     let open CalendarLib in

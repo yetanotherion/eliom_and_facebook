@@ -25,9 +25,16 @@ let insert_service unused unused2 =
                    Utils.hidde_button button_dom;
                    Html5.Manip.replaceChildren %span_elt [];
                    let url_input = Js.to_string (Js.Unsafe.coerce url_input_dom)##value in
-                   try_lwt
+                   try_lwt begin
                      lwt res = Utils.lwt_api_event url_input in
-                     Utils.process_event_answer url_input res %span_elt ~button:(Some button_dom) ~to_insert:(Some to_insert) (*647147472010945*)
+                     match_lwt (Utils.process_event_answer url_input res %span_elt (*647147472010945*)) with
+                       | Some result ->
+                         Utils.show_button button_dom;
+                         let event_data = result.Utils.ev_data in
+                         to_insert := Some (url_input, event_data.Fb.venue.Fb.city, event_data.Fb.start_time);
+                         Lwt.return_unit
+                       | None -> Lwt.return_unit
+                   end
                    with x -> (Html5.Manip.replaceChildren %span_elt
                                 [div [pcdata (Printf.sprintf "Invalid event %s" (Printexc.to_string x))]];
                               Lwt.return ())
