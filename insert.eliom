@@ -74,5 +74,6 @@ let insert_service unused unused2 =
                      ["js"; "bootstrap.min.js"]]
                 (body [Utils.fb_root_div;
                        div ~a:[a_class ["container"; "form-signin"]]
-                         [text_over_input; url_input; button; span_elt]])
+                         [text_over_input; url_input; button;];
+                       div ~a:[a_class ["container"]] [span_elt]])
                 ~other_head:Utils.bootstrap_metas)

@@ -36,6 +36,7 @@ let view_service unused unused2 =
             lwt events = %rpc_get_events () in
             let event_and_span = List.map (fun x -> (x, Dom_html.createSpan Dom_html.window##document)) events in
             let m = Dom_html.createTable Dom_html.window##document in
+            m##className <- Js.string "table table-striped";
             List.iter (fun (event, span) ->
               let tr = m##insertRow (-1) in
               let td = tr##insertCell (-1) in

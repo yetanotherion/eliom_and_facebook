@@ -107,10 +107,10 @@ let bootstrap_metas = [meta ~a:[a_charset "utf8"] ();
     api
 
   let print_event event wait_msg_spans =
-    let tds = [td [pcdata (Printf.sprintf "Name: %s" event.Fb.name)];
-               td [pcdata (Printf.sprintf "Owner: %s" event.Fb.owner.Fb.name)];
-               td [pcdata (Printf.sprintf "Location: %s" event.Fb.venue.Fb.city)];
-               td [pcdata (Printf.sprintf "Start_time: %s" event.Fb.start_time)]]
+    let tds = [td [pcdata event.Fb.name];
+               td [pcdata event.Fb.owner.Fb.name];
+               td [pcdata event.Fb.venue.Fb.city];
+               td [pcdata event.Fb.start_time]]
               @ (List.map (fun x -> td [x]) wait_msg_spans) in
     tr tds
 
@@ -145,7 +145,7 @@ let bootstrap_metas = [meta ~a:[a_charset "utf8"] ();
 
   let process_rsvp url users_name wait_span =
     lwt all_users = gather_all_users (url ^ "/" ^ users_name) [] in
-    Html5.Manip.replaceChildren wait_span [pcdata (Printf.sprintf "#%s:: %d" users_name (List.length all_users))];
+    Html5.Manip.replaceChildren wait_span [pcdata (Printf.sprintf "%d" (List.length all_users))];
     Lwt.return all_users
 
   let process_event_answer url res dynamic_param_board =
@@ -158,13 +158,19 @@ let bootstrap_metas = [meta ~a:[a_charset "utf8"] ();
           Lwt.return ([div [pcdata (Printf.sprintf "Invalid event, got data instead of event elements")]], None)
         end
         | Fb.Ok api_res -> begin
-          let make_span name =
-            span [pcdata (Printf.sprintf "wait as we gather %s users..." name)]
+          let make_span () =
+            span [pcdata "please wait as we gather data..."]
           in
-          let attending_span = make_span "attending" in
-          let declined_span = make_span "declined" in
-          let invited_span = make_span "invited" in
-          let to_replace = [table (print_event api_res [attending_span; declined_span; invited_span]) []] in
+          let attending_span = make_span () in
+          let declined_span = make_span () in
+          let invited_span = make_span () in
+          let curr_tr = print_event api_res [attending_span; declined_span; invited_span] in
+          let curr_tbody = tbody [curr_tr] in
+          let head_columns = tr (List.map (fun x -> th [pcdata x]) ["Name"; "Owner"; "Location"; "Start_time";
+                                                                    "attending"; "declined"; "invited"]) in
+          let curr_thead = thead [head_columns] in
+          let curr_table = tablex ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody] in
+          let to_replace = [div ~a:[a_class ["table-responsive"]] [curr_table]] in
           Html5.Manip.replaceChildren dynamic_param_board to_replace;
           lwt attending = process_rsvp url "attending" attending_span in
           lwt declined = process_rsvp url "declined" declined_span in
