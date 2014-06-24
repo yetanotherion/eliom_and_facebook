@@ -15,7 +15,7 @@ let insert_service unused unused2 =
                                    a_autofocus `Autofocus]
     ~input_type:`Text () in
   let text_over_input = h2 ~a:[a_class ["form-signin-heading"]] [pcdata "Enter event's id"] in
-  let button = button ~a:[a_class ["hidden"; "btn"; "btn-primary"]] ~button_type:`Button [pcdata "Record"] in
+  let button = button ~a:[a_class ["hidden"; "btn"; "btn-lg"; "btn-primary"]] ~button_type:`Button [pcdata "Record"] in
   let span_elt = span [] in
   let _ = {unit{
     let button_dom = Html5.To_dom.of_element %button in
@@ -73,7 +73,8 @@ let insert_service unused unused2 =
                 ~js:[["js"; "jquery.min.js"];
                      ["js"; "bootstrap.min.js"]]
                 (body [Utils.fb_root_div;
-                       div ~a:[a_class ["container"; "form-signin"]]
+                       div ~a:[a_class ["container"; "form-signin"];
+                               a_style "text-align:center"]
                          [text_over_input; url_input; button;];
                        div ~a:[a_class ["container"]] [span_elt]])
                 ~other_head:Utils.bootstrap_metas)
