@@ -148,6 +148,19 @@ let bootstrap_metas = [meta ~a:[a_charset "utf8"] ();
     Html5.Manip.replaceChildren wait_span [pcdata (Printf.sprintf "%d" (List.length all_users))];
     Lwt.return all_users
 
+  let make_table columns_name data =
+    let trs = List.map (fun x -> tr (List.map (fun y -> td [y]) x)) data in
+    let curr_tbody = tbody trs in
+    let head_columns = tr (List.map (fun x -> th [pcdata x]) columns_name) in
+    let curr_thead = thead [head_columns] in
+    let curr_table = tablex ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody] in
+    div ~a:[a_class ["table-responsive"]] [curr_table]
+
+  let make_complete_event_table data = make_table ["Name"; "Owner";
+                                                   "Location"; "Start_time";
+                                                   "attending"; "declined";
+                                                   "invited"] data
+
   let process_event_answer url res dynamic_param_board =
     lwt to_replace, result =
       match res with
@@ -157,25 +170,26 @@ let bootstrap_metas = [meta ~a:[a_charset "utf8"] ();
         | Fb.Data _ -> begin
           Lwt.return ([div [pcdata (Printf.sprintf "Invalid event, got data instead of event elements")]], None)
         end
-        | Fb.Ok api_res -> begin
+        | Fb.Ok event -> begin
           let make_span () =
             span [pcdata "please wait as we gather data..."]
           in
           let attending_span = make_span () in
           let declined_span = make_span () in
           let invited_span = make_span () in
-          let curr_tr = print_event api_res [attending_span; declined_span; invited_span] in
-          let curr_tbody = tbody [curr_tr] in
-          let head_columns = tr (List.map (fun x -> th [pcdata x]) ["Name"; "Owner"; "Location"; "Start_time";
-                                                                    "attending"; "declined"; "invited"]) in
-          let curr_thead = thead [head_columns] in
-          let curr_table = tablex ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody] in
-          let to_replace = [div ~a:[a_class ["table-responsive"]] [curr_table]] in
+          let data = [[pcdata event.Fb.name;
+                       pcdata event.Fb.owner.Fb.name;
+                       pcdata event.Fb.venue.Fb.city;
+                       pcdata event.Fb.start_time;
+                       attending_span;
+                       declined_span;
+                       invited_span]] in
+          let to_replace = [make_complete_event_table data] in
           Html5.Manip.replaceChildren dynamic_param_board to_replace;
           lwt attending = process_rsvp url "attending" attending_span in
           lwt declined = process_rsvp url "declined" declined_span in
           lwt invited = try_lwt process_rsvp url "invited" invited_span with _ -> Lwt.return [] in
-          Lwt.return (to_replace, (Some (make_event_and_users api_res attending declined invited)))
+          Lwt.return (to_replace, (Some (make_event_and_users event attending declined invited)))
         end
     in
     Html5.Manip.replaceChildren dynamic_param_board to_replace;

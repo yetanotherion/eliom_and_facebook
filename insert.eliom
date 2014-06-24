@@ -51,17 +51,19 @@ let insert_service unused unused2 =
             lwt res =
                 try_lwt
                   match_lwt (%rpc_insert_url arg) with
-                    | None -> Lwt.return ("Event inserted")
+                    | None -> Lwt.return [pcdata "Event inserted"]
                     | Some event ->
-                      Lwt.return (Printf.sprintf "Event already inserted %s" (Utils.event_to_string event))
-                  with e -> Lwt.return (Printf.sprintf "An exception occured with the db: %s" (Printexc.to_string e))
+                      let inserted_msg = pcdata "Event already inserted" in
+                      let table = Utils.make_table ["url"; "location"; "start_date"] [[pcdata event.Utils.url;
+                                                                                       pcdata event.Utils.location;
+                                                                                       pcdata (Utils.epoch_to_tz_date event.Utils.start_date)]] in
+                      Lwt.return [inserted_msg; table]
+                  with e -> Lwt.return [pcdata (Printf.sprintf "An exception occured with the db: %s" (Printexc.to_string e))]
            in
-          Html5.Manip.replaceChildren
-%span_elt
-            [div [pcdata res]];
-          Utils.hidde_button button_dom;
-          to_insert := None;
-          Lwt.return ())
+           Html5.Manip.replaceChildren %span_elt [div ~a:[a_style "text-align:center"] res];
+           Utils.hidde_button button_dom;
+           to_insert := None;
+           Lwt.return ())
       )
     )
   }}
