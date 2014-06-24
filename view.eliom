@@ -55,8 +55,13 @@ let view_service unused unused2 =
 
   Lwt.return (Eliom_tools.D.html ~title: "advertise your event"
                 ~css:[["css"; "bootstrap.min.css"];
-                      ["css"; "mb.css"]]
+                      ["css"; "mb.css"];
+                      ["css"; "signin.css"]]
                 ~js:[["js"; "jquery.min.js"];
                      ["js"; "bootstrap.min.js"]]
-                (body [Utils.fb_root_div; url_input; span_elt])
+                (body [Utils.fb_root_div;
+                       div ~a:[a_class ["container"; "form-signin"];
+                               a_style "text-align:center"]
+                         [url_input];
+                       div ~a:[a_class ["container"]] [span_elt]])
                 ~other_head:Utils.bootstrap_metas)
