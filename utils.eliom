@@ -7,7 +7,6 @@
     location: string;
     start_date: Int32.t;
   }
-
 }}
 
 let fb_root_div = div ~a:[a_id "fb-root"] []
@@ -143,13 +142,60 @@ let bootstrap_metas = [meta ~a:[a_charset "utf8"] ();
             let next_param = substring_after_char x '?' in
             gather_all_users (Printf.sprintf "%s?%s" url next_param) new_res
 
-  let process_rsvp url users_name wait_span =
-    lwt all_users = gather_all_users (url ^ "/" ^ users_name) [] in
-    Html5.Manip.replaceChildren wait_span [pcdata (Printf.sprintf "%d" (List.length all_users))];
-    Lwt.return all_users
+  let process_rsvp url users_name =
+   lwt all_users = gather_all_users (url ^ "/" ^ users_name) [] in
+   Lwt.return all_users
 
-  let make_table columns_name data =
-    let trs = List.map (fun x -> tr (List.map (fun y -> td [y]) x)) data in
+  let process_all_rsvp url =
+    lwt attending = process_rsvp url "attending" in
+    lwt declined = process_rsvp url "declined" in
+    lwt invited = try_lwt process_rsvp url "invited" with _ -> Lwt.return [] in
+    Lwt.return (attending, declined, invited)
+
+  let display_rsvp users wait_span =
+      Html5.Manip.replaceChildren wait_span [pcdata (Printf.sprintf "%d" (List.length users))]
+
+  let display_all_rsvp rsvp_info_display =
+    List.iter (fun (rsvp_info, display) -> display_rsvp rsvp_info display) rsvp_info_display
+
+  let make_tds data =
+    List.map (fun y -> td [y]) data
+
+  type one_span = [ | `Span] elt
+
+  let make_wait_span () =
+    span [pcdata "please wait as we gather data..."]
+
+  type spans = {
+    event_name_span: one_span;
+    event_owner_span: one_span;
+    event_venue_span: one_span;
+    event_start_time_span: one_span;
+    attending_span: one_span;
+    declined_span: one_span;
+    invited_span: one_span;
+  }
+
+  let create_spans () = {
+    event_name_span = make_wait_span ();
+    event_owner_span = make_wait_span ();
+    event_venue_span = make_wait_span ();
+    event_start_time_span = make_wait_span ();
+    attending_span = make_wait_span ();
+    declined_span = make_wait_span ();
+    invited_span = make_wait_span ();
+  }
+
+  let integrate_spans_in_td spans =
+    make_tds [spans.event_name_span;
+              spans.event_owner_span;
+              spans.event_venue_span;
+              spans.event_start_time_span;
+              spans.attending_span;
+              spans.declined_span;
+              spans.invited_span]
+
+  let make_table columns_name trs =
     let curr_tbody = tbody trs in
     let head_columns = tr (List.map (fun x -> th [pcdata x]) columns_name) in
     let curr_thead = thead [head_columns] in
@@ -161,39 +207,32 @@ let bootstrap_metas = [meta ~a:[a_charset "utf8"] ();
                                                    "attending"; "declined";
                                                    "invited"] data
 
-  let process_event_answer url res dynamic_param_board =
-    lwt to_replace, result =
+  let process_event_answer url res =
       match res with
         | Fb.Nok error -> begin
-          Lwt.return ([div [pcdata (Printf.sprintf "Invalid event, got error {message:%s, error_type: %s, code: %d}" error.Fb.message error.Fb.error_type error.Fb.code)]], None)
+          `Err [div [pcdata (Printf.sprintf "Invalid event, got error {message:%s, error_type: %s, code: %d}" error.Fb.message error.Fb.error_type error.Fb.code)]]
         end
         | Fb.Data _ -> begin
-          Lwt.return ([div [pcdata (Printf.sprintf "Invalid event, got data instead of event elements")]], None)
+          `Err [div [pcdata (Printf.sprintf "Invalid event, got data instead of event elements")]]
         end
-        | Fb.Ok event -> begin
-          let make_span () =
-            span [pcdata "please wait as we gather data..."]
-          in
-          let attending_span = make_span () in
-          let declined_span = make_span () in
-          let invited_span = make_span () in
-          let data = [[pcdata event.Fb.name;
-                       pcdata event.Fb.owner.Fb.name;
-                       pcdata event.Fb.venue.Fb.city;
-                       pcdata event.Fb.start_time;
-                       attending_span;
-                       declined_span;
-                       invited_span]] in
-          let to_replace = [make_complete_event_table data] in
-          Html5.Manip.replaceChildren dynamic_param_board to_replace;
-          lwt attending = process_rsvp url "attending" attending_span in
-          lwt declined = process_rsvp url "declined" declined_span in
-          lwt invited = try_lwt process_rsvp url "invited" invited_span with _ -> Lwt.return [] in
-          Lwt.return (to_replace, (Some (make_event_and_users event attending declined invited)))
-        end
-    in
-    Html5.Manip.replaceChildren dynamic_param_board to_replace;
-    Lwt.return result
+        | Fb.Ok event -> `Ok event
+
+  let make_event_display_line event attending_span declined_span invited_span =
+   make_tds [pcdata event.Fb.name;
+             pcdata event.Fb.owner.Fb.name;
+             pcdata event.Fb.venue.Fb.city;
+             pcdata event.Fb.start_time;
+             attending_span;
+             declined_span;
+             invited_span]
+
+  let replace_event_spans event spans =
+    List.iter (fun (span, value) ->
+      Html5.Manip.replaceChildren span [pcdata value])
+      [(spans.event_name_span, event.Fb.name);
+       (spans.event_owner_span, event.Fb.owner.Fb.name);
+       (spans.event_venue_span, event.Fb.venue.Fb.city);
+       (spans.event_start_time_span, event.Fb.start_time)]
 
   let epoch_to_tz_date date =
     let open CalendarLib in

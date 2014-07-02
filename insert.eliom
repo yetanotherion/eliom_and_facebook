@@ -3,6 +3,33 @@
   open Html5.D
   open Eliom_parameter
 }}
+(*647147472010945*)
+
+{client{
+  let process_res res url_input span_elt to_insert button_dom =
+    match (Utils.process_event_answer url_input res) with
+      | `Err x -> begin
+        Html5.Manip.replaceChildren span_elt x;
+        Lwt.return_unit end
+      | `Ok event -> begin
+          let attending_s, declined_s, invited_s =
+          Utils.make_wait_span (), Utils.make_wait_span (), Utils.make_wait_span ()
+        in
+        let event_line = tr (Utils.make_event_display_line event attending_s declined_s invited_s) in
+        let displayed_table = Utils.make_complete_event_table [event_line] in
+        Html5.Manip.replaceChildren span_elt [displayed_table];
+        lwt res = Utils.process_all_rsvp url_input in
+        let (attending, declined, invited) = res in
+        Utils.display_all_rsvp [(attending, attending_s);
+                                (declined, declined_s);
+                                (invited, invited_s)];
+        Utils.show_button button_dom;
+        let result = Utils.make_event_and_users event attending declined invited in
+        let event_data = result.Utils.ev_data in
+        to_insert := Some (url_input, event_data.Fb.venue.Fb.city, event_data.Fb.start_time);
+        Lwt.return_unit
+        end
+}}
 
 let my_insert (url, location, date) =
   Db.insert url location (Utils.to_epoch date)
@@ -30,13 +57,8 @@ let insert_service unused unused2 =
                    let url_input = Js.to_string (Js.Unsafe.coerce url_input_dom)##value in
                    try_lwt begin
                      lwt res = Utils.lwt_api_event url_input in
-                     match_lwt (Utils.process_event_answer url_input res %span_elt (*647147472010945*)) with
-                       | Some result ->
-                         Utils.show_button button_dom;
-                         let event_data = result.Utils.ev_data in
-                         to_insert := Some (url_input, event_data.Fb.venue.Fb.city, event_data.Fb.start_time);
-                         Lwt.return_unit
-                       | None -> Lwt.return_unit
+                     lwt () = process_res res url_input %span_elt to_insert button_dom in
+                     Lwt.return_unit
                    end
                    with x -> (Html5.Manip.replaceChildren %span_elt
                                 [div [pcdata (Printf.sprintf "Invalid event %s" (Printexc.to_string x))]];
@@ -54,9 +76,10 @@ let insert_service unused unused2 =
                     | None -> Lwt.return [pcdata "Event inserted"]
                     | Some event ->
                       let inserted_msg = pcdata "Event already inserted" in
-                      let table = Utils.make_table ["url"; "location"; "start_date"] [[pcdata event.Utils.url;
-                                                                                       pcdata event.Utils.location;
-                                                                                       pcdata (Utils.epoch_to_tz_date event.Utils.start_date)]] in
+                      let tds = Utils.make_tds [pcdata event.Utils.url;
+                                                pcdata event.Utils.location;
+                                                pcdata (Utils.epoch_to_tz_date event.Utils.start_date)] in
+                      let table = Utils.make_table ["url"; "location"; "start_date"] [tr tds] in
                       Lwt.return [inserted_msg; table]
                   with e -> Lwt.return [pcdata (Printf.sprintf "An exception occured with the db: %s" (Printexc.to_string e))]
            in

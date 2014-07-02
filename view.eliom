@@ -11,16 +11,29 @@ let rpc_get_events =
   server_function Json.t<unit> my_get
 
 {client{
-  let process_event event span_element =
+  let process_event event spans =
     try_lwt
-      lwt res = Utils.lwt_api_event event.Utils.url in
-      lwt unused = Utils.process_event_answer event.Utils.url res span_element in
-      Lwt.return_unit
+      let event_url = event.Utils.url in
+      lwt res = Utils.lwt_api_event event_url in
+      match (Utils.process_event_answer event.Utils.url res) with
+        | `Err x -> begin
+          Html5.Manip.replaceChildren spans.Utils.event_name_span x;
+          Lwt.return_unit
+        end
+        | `Ok event -> begin
+          Utils.replace_event_spans event spans;
+          lwt (attending, declined, invited) = Utils.process_all_rsvp event_url in
+           Utils.display_all_rsvp [(attending, spans.Utils.attending_span);
+                                   (declined, spans.Utils.declined_span);
+                                   (invited, spans.Utils.invited_span)];
+          Lwt.return_unit
+          end
     with x -> begin
-      Html5.Manip.replaceChildren span_element
+      Html5.Manip.replaceChildren spans.Utils.event_name_span
         [pcdata (Printf.sprintf "Invalid event %s" (Printexc.to_string x))];
       Lwt.return_unit
     end
+
 }}
 
 let view_service unused unused2 =
@@ -34,20 +47,11 @@ let view_service unused unused2 =
           (fun _ _ ->
             lwt () = Utils.lwt_installSdk () in
             lwt events = %rpc_get_events () in
-            let event_and_span = List.map (fun x -> (x, Dom_html.createSpan Dom_html.window##document)) events in
-            let m = Dom_html.createTable Dom_html.window##document in
-            m##className <- Js.string "table table-striped";
-            List.iter (fun (event, span) ->
-              let tr = m##insertRow (-1) in
-              let td = tr##insertCell (-1) in
-              Dom.appendChild td span;
-              Dom.appendChild tr td;
-              Dom.appendChild m tr) event_and_span;
-            let to_html5 m =
-              Html5.Of_dom.of_element (Js.Unsafe.coerce m)
-            in
-            Html5.Manip.replaceChildren %span_elt [to_html5 m];
-            Lwt.join (List.map (fun (event, span) -> process_event event (to_html5 span)) event_and_span)
+            let event_and_span = List.map (fun x -> (x, Utils.create_spans ())) events in
+            let trs = List.map (fun (event, s) -> tr (Utils.integrate_spans_in_td s)) event_and_span in
+            let table = Utils.make_complete_event_table trs in
+            Html5.Manip.replaceChildren %span_elt [table];
+            Lwt.join (List.map (fun (event, span) -> process_event event span) event_and_span)
       )))
 
   }}
