@@ -17,6 +17,15 @@ let bootstrap_metas = [meta ~a:[a_charset "utf8"] ();
                                 a_content "width=device-width, initial-scale=1"] () ]
 {client{
   type event_user = String.t * String.t
+  module RsvpSet = Set.Make (
+    struct
+      type t = event_user
+      let compare = Pervasives.compare
+    end)
+
+  let make_rsvp_set rsvp_list =
+    List.fold_left (fun s elt -> RsvpSet.add elt s) RsvpSet.empty rsvp_list
+
   let extract_user user = (user.Fb.user_id, user.Fb.name)
 
   type event_and_users = {
