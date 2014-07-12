@@ -31,4 +31,11 @@ apt-get install libmagickcore-dev
 opam install imagemagick
 
 apt-get install postgresql
-sudo -u postgres createuser --superuser $USER
+
+#https://help.ubuntu.com/community/PostgreSQL
+#need to run mannually, for the website to connect to it
+#sudo -u postgres psql postgres
+#\password postgres (put postgres)
+
+#for convenience on db/creation table scripts
+#sudo -u postgres createuser --superuser $USER
