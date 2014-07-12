@@ -13,8 +13,13 @@ let get_db : unit -> unit Lwt_PGOCaml.t Lwt.t =
   fun () ->
     match !db_handler with
       | Some h -> Lwt.return h
-      | None -> Lwt_PGOCaml.connect ~database:"testapp" ()
-
+      | None -> (try_lwt
+                   Lwt_PGOCaml.connect ~database:"testapp" ()
+                 with _ -> Lwt_PGOCaml.connect ~host:"127.0.0.1"
+                                               ~user:"postgres"
+                                               ~password:"postgres"
+                                               ~port:5432
+                                               ~database:"testapp" ())
 let events = <:table< events (
   url text NOT NULL,
   location text NOT NULL,
