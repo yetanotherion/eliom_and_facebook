@@ -94,8 +94,6 @@ let rpc_get_events =
                                                            Printf.sprintf "common_invited:%d" (Utils.RsvpSet.cardinal common_invited.users))]);
    user_sets_ref := user_sets
 }}
-(* js_of_ocaml:dom.ml: preventDefault,
-   js_of_ocaml:dom_html: stopPropagation*)
 
 let view_service unused unused2 =
   let span_elt = span [] in

@@ -17,11 +17,14 @@
 }}
 
 let fb_root_div = div ~a:[a_id "fb-root"] []
-let bootstrap_metas = [meta ~a:[a_charset "utf8"] ();
+let utf8_meta = meta ~a:[a_charset "utf8"] ()
+let viewport_meta = meta ~a:[a_name "viewport";
+                             a_content "width=device-width, initial-scale=1"] ()
+let bootstrap_metas = [utf8_meta;
+                       viewport_meta;
                        meta ~a:[a_http_equiv "X-UA-Compatible";
-                                 a_content "IE=edge"] ();
-                       meta ~a:[a_name "viewport";
-                                a_content "width=device-width, initial-scale=1"] () ]
+                                 a_content "IE=edge"] ()]
+
 {client{
   let make_rsvp_set rsvp_list =
     List.fold_left (fun s elt -> RsvpSet.add elt s) RsvpSet.empty rsvp_list
