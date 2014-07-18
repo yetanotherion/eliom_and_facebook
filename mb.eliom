@@ -15,8 +15,8 @@ let main_service =
   Eliom_service.App.service ~path:[] ~get_params:Eliom_parameter.unit ()
 
 let setup_services () =
-  Mb_app.register_service ["manage_audience"] Eliom_parameter.unit Insert.insert_service,
-  Mb_app.register_service ["add_events"] Eliom_parameter.unit View.view_service
+  Mb_app.register_service ["add_events"] Eliom_parameter.unit Insert.insert_service,
+  Mb_app.register_service ["manage_audience"] Eliom_parameter.unit View.view_service
 
 let () =
   let insert, view = setup_services () in
