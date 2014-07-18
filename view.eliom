@@ -109,7 +109,7 @@ let view_service unused unused2 =
   let _ = {unit{
     let open Lwt_js_events in
     let onchanges _ _ =
-      lwt () = Utils.lwt_installSdk () in
+      lwt () = Utils.lwt_autologin () in
       lwt events = %rpc_get_events () in
       let event_and_span = List.map (fun x -> (x, Utils.create_spans (), ref None)) events in
       let trs = List.map (fun (event, s, _) -> tr (Utils.integrate_spans_in_td s)) event_and_span in
