@@ -12,6 +12,16 @@
     all_users: user_set list;
     next_id: int;
   }
+
+  let make_users_in_div ?draggable:(d=true) ?size:(s=16) text =
+    let icon = img ~src:(uri_of_string (fun () -> "imgs/users.png")) ~alt:"users" ~a:[a_height s; a_width s;
+                                                                                      a_draggable d] () in
+    [icon; pcdata text]
+
+  let make_users_basket_in_div number_of_users =
+    make_users_in_div (Printf.sprintf "%d fans" number_of_users)
+      ~draggable:false ~size:42
+
 }}
 
 let my_get () =
@@ -62,9 +72,7 @@ let rpc_get_events =
    }, new_user)
 
  let make_user_button user btn_type text =
-   let res = button ~a:[a_class ["btn"; "btn-sm"; btn_type];
-                        a_draggable true]
-                     ~button_type:`Button [pcdata text] in
+   let res = div (make_users_in_div text) in
    let res_dom = Html5.To_dom.of_element res in
    let open Lwt_js_events in
    let ondragstarts ev _ =
@@ -77,30 +85,43 @@ let rpc_get_events =
    Lwt.async (fun () -> dragstarts res_dom ondragstarts);
    res
 
+ let check_event_coherence event =
+   let attending = Utils.make_rsvp_set event.Utils.attending in
+   let declined = Utils.make_rsvp_set event.Utils.declined in
+   let invited = Utils.make_rsvp_set event.Utils.invited in
+   let open Utils.RsvpSet in
+   Firebug.console##log(Printf.sprintf "attending&declined:%d" (cardinal (inter attending declined)));
+   Firebug.console##log(Printf.sprintf "attending&invited:%d" (cardinal (inter attending invited)));
+   Firebug.console##log(Printf.sprintf "declined&invited:%d" (cardinal (inter declined invited)))
 
  let compare_rsvp user_sets_ref event compared_users compared_span =
-   let user_sets, compared_user = append_new_user_set !user_sets_ref (Utils.make_rsvp_set compared_users) in
+   let () = check_event_coherence event in
+   let compared_users_set = Utils.make_rsvp_set compared_users in
+   let user_sets, compared_user = append_new_user_set !user_sets_ref compared_users_set in
    let user_sets, common_attending = append_new_user_set user_sets (common_users event.Utils.attending compared_users) in
    let user_sets, common_declined = append_new_user_set user_sets (common_users event.Utils.declined compared_users) in
    let user_sets, common_invited = append_new_user_set user_sets (common_users event.Utils.invited compared_users) in
+   let not_invited_users = Utils.RsvpSet.diff compared_users_set common_invited.users in
+   let user_sets, not_invited = append_new_user_set user_sets not_invited_users in
    Html5.Manip.replaceChildren compared_span
      (List.map (fun (u, x, y) -> make_user_button u x y) [(compared_user, "btn-success",
                                                            Printf.sprintf "%d" (List.length compared_users));
                                                           (common_attending, "btn-info",
-                                                           Printf.sprintf "common_attending:%d" (Utils.RsvpSet.cardinal common_attending.users));
+                                                           Printf.sprintf "in_attending:%d" (Utils.RsvpSet.cardinal common_attending.users));
                                                           (common_declined, "btn-warning",
-                                                           Printf.sprintf "common_declined:%d" (Utils.RsvpSet.cardinal common_declined.users));
+                                                           Printf.sprintf "in_declined:%d" (Utils.RsvpSet.cardinal common_declined.users));
                                                           (common_invited, "btn-danger",
-                                                           Printf.sprintf "common_invited:%d" (Utils.RsvpSet.cardinal common_invited.users))]);
+                                                           Printf.sprintf "in_invited:%d" (Utils.RsvpSet.cardinal common_invited.users));
+                                                          (not_invited, "other_style",
+                                                           Printf.sprintf "not_invited:%d" (Utils.RsvpSet.cardinal not_invited.users))]);
    user_sets_ref := user_sets
 }}
 
 let view_service unused unused2 =
   let span_elt = span [] in
-  let all_users_button = button ~a:[a_class ["btn"; "btn-sm"; "btn-success"]]
-                                ~button_type:`Button [pcdata "empty users"] in
+
   let all_users_container = ref Utils.RsvpSet.empty in
-  let all_users_div = div [all_users_button] in
+  let all_users_div = div (make_users_basket_in_div 0) in
   let user_sets = ref {
     all_users = [];
     next_id = 0;
@@ -144,8 +165,7 @@ let view_service unused unused2 =
       let corresponding_user = List.find (fun x -> x.user_id = button_id) (!users).all_users in
       let all_users_container = %all_users_container in
       all_users_container := Utils.RsvpSet.union !all_users_container corresponding_user.users;
-      Html5.Manip.replaceChildren %all_users_div [button ~a:[a_class ["btn"; "btn-sm"; "btn-success"]]
-                                                     ~button_type:`Button [pcdata (Printf.sprintf "%d users" (Utils.RsvpSet.cardinal !all_users_container))]];
+      Html5.Manip.replaceChildren %all_users_div (make_users_basket_in_div (Utils.RsvpSet.cardinal !all_users_container));
       Lwt.return_unit
     in
     let ondragover ev _ =
