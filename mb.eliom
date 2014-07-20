@@ -20,29 +20,6 @@ let setup_services () =
 
 let () =
   let insert, view = setup_services () in
-  let icon_png_link size = uri_of_string (fun () -> Printf.sprintf "ico/apple-touch-icon-%d-precomposed.png" size)
-  in
-  let apple_touch_icon_link size =
-    let href_link = icon_png_link size in
-    link ~rel:[`Other "apple-touch-icon-precomposed"] ~a:[a_sizes [size; size]] ~href:href_link ()
-  in
-  let touch_icons = List.map apple_touch_icon_link [144; 114; 72] in
-  let icons = touch_icons @ [link ~rel:[`Other "apple-touch-icon-precomposed"] ~href:(icon_png_link 57) ();
-                             link ~rel:[`Other "shortcut icon"; `Icon] ~href:(uri_of_string (fun () -> "ico/favicon.png")) ()] in
-  let js_scripts = ["jquery.js";
-                    "bootstrap-transition.js";
-                    "bootstrap-alert.js";
-                    "bootstrap-modal.js";
-                    "bootstrap-dropdown.js";
-                    "bootstrap-scrollspy.js";
-                    "bootstrap-tab.js";
-                    "bootstrap-tooltip.js";
-                    "bootstrap-popover.js";
-                    "bootstrap-button.js";
-                    "bootstrap-collapse.js";
-                    "bootstrap-carousel.js";
-                    "bootstrap-typeahead.js"] in
-  let scripts = List.map (fun x -> script ~a:[a_src (uri_of_string (fun () -> Printf.sprintf "js/%s" x))] (pcdata ""))  js_scripts in
   let links = ul ~a:[a_class ["nav"]]
     [li ~a:[a_class ["active"]] [a ~service:view [pcdata "Manage your audience"] ()];
      li [a ~service:insert [pcdata "Manage pool of events"] ()]]
@@ -63,8 +40,8 @@ let () =
         ~css:[["css"; "bootstrap.css"];
               ["css"; "bootstrap-responsive.css"];
               ["css"; "mb-home.css"]]
-        (body ([all_body] @ scripts))
+        (body ([all_body] @ Utils.bs_scripts))
         ~other_head:([Utils.utf8_meta;
-                      Utils.viewport_meta] @ icons)
+                      Utils.viewport_meta] @ Utils.bs_icons)
       in
       Lwt.return page)

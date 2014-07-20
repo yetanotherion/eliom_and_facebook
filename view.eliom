@@ -95,7 +95,7 @@ let rpc_get_events =
    Firebug.console##log(Printf.sprintf "declined&invited:%d" (cardinal (inter declined invited)))
 
  let compare_rsvp user_sets_ref event compared_users compared_span =
-   let () = check_event_coherence event in
+   (*let () = check_event_coherence event in*)
    let compared_users_set = Utils.make_rsvp_set compared_users in
    let user_sets, compared_user = append_new_user_set !user_sets_ref compared_users_set in
    let user_sets, common_attending = append_new_user_set user_sets (common_users event.Utils.attending compared_users) in
@@ -118,8 +118,8 @@ let rpc_get_events =
 }}
 
 let view_service unused unused2 =
-  let span_elt = span [] in
-
+  let selected_events_span = span [] in
+  let db_selected_events_span = span [] in
   let all_users_container = ref Utils.RsvpSet.empty in
   let all_users_div = div (make_users_basket_in_div 0) in
   let user_sets = ref {
@@ -132,10 +132,13 @@ let view_service unused unused2 =
     let onchanges _ _ =
       lwt () = Utils.lwt_autologin () in
       lwt events = %rpc_get_events () in
+      let trs = List.map (fun x -> tr (Utils.print_event x)) events in
+      let db_table = Utils.make_table ["Name"; "Owner"; "Location"; "Date"] trs in
+      Html5.Manip.replaceChildren %db_selected_events_span [db_table];
       let event_and_span = List.map (fun x -> (x, Utils.create_spans (), ref None)) events in
       let trs = List.map (fun (event, s, _) -> tr (Utils.integrate_spans_in_td s)) event_and_span in
       let table = Utils.make_complete_event_table trs in
-      Html5.Manip.replaceChildren %span_elt [table];
+      Html5.Manip.replaceChildren %selected_events_span [table];
       lwt () = Lwt.join (List.map (fun (event, span, user_ref) -> process_event event span user_ref) event_and_span) in
       match event_and_span with
         | [] -> Lwt.return_unit
@@ -176,15 +179,26 @@ let view_service unused unused2 =
     async (fun () -> drops (Html5.To_dom.of_element %all_users_div) ondrop)
   }}
   in
+  let all_body = [Utils.fb_root_div;
+                  div ~a:[a_class ["container-fluid"]]
+                    [div ~a:[a_class ["row-fluid"]]
+                        [div ~a:[a_class ["span3"]]
+                            [div ~a:[a_class ["well"; "sidebar-nav"]]
+                                [ul ~a:[a_class ["nav"; "nav-list"]]
+                                    [li ~a:[a_class ["active"]] [url_input];
+                                     li [db_selected_events_span]]]];
+                         div ~a:[a_class ["span9"]] [all_users_div;
+                                                     div ~a:[a_class ["container"]] [selected_events_span]]]]]
+  in
+  let b = all_body @ Utils.bs_scripts in
+  let h = Utils.bootstrap_metas @ Utils.bs_icons in
   Lwt.return (Eliom_tools.D.html ~title: "advertise your event"
                 ~css:[["css"; "bootstrap.min.css"];
                       ["css"; "mb.css"];
+                      ["css"; "mb-view.css"];
+                      ["css"; "bootstrap-responsive.css"];
                       ["css"; "signin.css"]]
                 ~js:[["js"; "jquery.min.js"];
                      ["js"; "bootstrap.min.js"]]
-                (body [Utils.fb_root_div;
-                       div ~a:[a_class ["container"; "form-signin"];
-                               a_style "text-align:center"]
-                         [url_input; all_users_div];
-                       div ~a:[a_class ["container"]] [span_elt]])
-                ~other_head:Utils.bootstrap_metas)
+                (body b)
+                ~other_head:h)

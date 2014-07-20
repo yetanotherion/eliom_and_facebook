@@ -6,6 +6,8 @@
     url: string;
     location: string;
     start_date: Int32.t;
+    owner: string;
+    name: string
   }
 
   type event_user = String.t * String.t
@@ -14,6 +16,25 @@
       type t = event_user
       let compare = Pervasives.compare
     end)
+
+  let to_epoch date =
+    let open CalendarLib in
+        let curr_date =
+          try
+            Calendar.Precise.to_unixfloat (Printer.Precise_Calendar.from_fstring "%Y-%m-%dT%H:%M:%S%z" date)
+          with (Invalid_argument _) -> Date.to_unixfloat (Printer.Date.from_fstring "%Y-%m-%d" date)
+        in
+        Int32.of_float curr_date
+
+  let epoch_to_fmt_date fmt date =
+    let open CalendarLib in
+        let date_in_float = Int32.to_float date in
+        let t = Unix.gmtime date_in_float in
+        let curr_time = Calendar.Precise.from_gmt (Calendar.Precise.from_unixtm t) in
+        Printer.Precise_Calendar.sprint fmt curr_time
+
+  let epoch_to_tz_date = epoch_to_fmt_date "%Y-%m-%dT%H:%M:%S%z"
+  let epoch_to_light_date = epoch_to_fmt_date "%Y-%m-%d %H:%M"
 }}
 
 let fb_root_div = div ~a:[a_id "fb-root"] []
@@ -117,11 +138,13 @@ let bootstrap_metas = [utf8_meta;
     Fb.api_event url f;
     api
 
+
+
   let print_event event wait_msg_spans =
     let tds = [td [pcdata event.Fb.name];
                td [pcdata event.Fb.owner.Fb.name];
                td [pcdata event.Fb.venue.Fb.city];
-               td [pcdata event.Fb.start_time]]
+               td [pcdata (epoch_to_light_date (to_epoch event.Fb.start_time))]]
               @ (List.map (fun x -> td [x]) wait_msg_spans) in
     tr tds
 
@@ -233,7 +256,7 @@ let bootstrap_metas = [utf8_meta;
    make_tds [pcdata event.Fb.name;
              pcdata event.Fb.owner.Fb.name;
              pcdata event.Fb.venue.Fb.city;
-             pcdata event.Fb.start_time;
+             pcdata (epoch_to_light_date (to_epoch event.Fb.start_time));
              attending_span;
              declined_span;
              invited_span]
@@ -246,22 +269,35 @@ let bootstrap_metas = [utf8_meta;
        (spans.event_venue_span, event.Fb.venue.Fb.city);
        (spans.event_start_time_span, event.Fb.start_time)]
 
-  let epoch_to_tz_date date =
-    let open CalendarLib in
-        let date_in_float = Int32.to_float date in
-        let t = Unix.gmtime date_in_float in
-        let curr_time = Calendar.Precise.from_gmt (Calendar.Precise.from_unixtm t) in
-        Printer.Precise_Calendar.sprint "%Y-%m-%dT%H:%M:%S%z" curr_time
-
-  let event_to_string event =
-    Printf.sprintf "url: %s, location: %s, start_date:%s" event.url event.location (epoch_to_tz_date event.start_date)
+  let print_event event =
+    [td [pcdata event.name];
+     td [pcdata event.owner];
+     td [pcdata event.location];
+     td [pcdata (epoch_to_light_date event.start_date)]]
 }}
 
-let to_epoch date =
-  let open CalendarLib in
-      let curr_date =
-        try
-          Calendar.Precise.to_unixfloat (Printer.Precise_Calendar.from_fstring "%Y-%m-%dT%H:%M:%S%z" date)
-        with (Invalid_argument _) -> Date.to_unixfloat (Printer.Date.from_fstring "%Y-%m-%d" date)
-      in
-      Int32.of_float curr_date
+let icon_png_link size = uri_of_string (fun () -> Printf.sprintf "ico/apple-touch-icon-%d-precomposed.png" size)
+
+let apple_touch_icon_link size =
+    let href_link = icon_png_link size in
+    link ~rel:[`Other "apple-touch-icon-precomposed"] ~a:[a_sizes [size; size]] ~href:href_link ()
+
+let touch_icons = List.map apple_touch_icon_link [144; 114; 72]
+
+let bs_icons = touch_icons @ [link ~rel:[`Other "apple-touch-icon-precomposed"] ~href:(icon_png_link 57) ();
+                             link ~rel:[`Other "shortcut icon"; `Icon] ~href:(uri_of_string (fun () -> "ico/favicon.png")) ()]
+
+let js_scripts = ["jquery.js";
+                  "bootstrap-transition.js";
+                  "bootstrap-alert.js";
+                  "bootstrap-modal.js";
+                  "bootstrap-dropdown.js";
+                  "bootstrap-scrollspy.js";
+                  "bootstrap-tab.js";
+                  "bootstrap-tooltip.js";
+                  "bootstrap-popover.js";
+                  "bootstrap-button.js";
+                  "bootstrap-collapse.js";
+                  "bootstrap-carousel.js";
+                  "bootstrap-typeahead.js"]
+let bs_scripts = List.map (fun x -> script ~a:[a_src (uri_of_string (fun () -> Printf.sprintf "js/%s" x))] (pcdata ""))  js_scripts

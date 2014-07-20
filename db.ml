@@ -23,7 +23,9 @@ let get_db : unit -> unit Lwt_PGOCaml.t Lwt.t =
 let events = <:table< events (
   url text NOT NULL,
   location text NOT NULL,
-  start_date integer NOT NULL
+  start_date integer NOT NULL,
+  owner text NOT NULL,
+  name text NOT NULL
 ) >>
 
 let get_urls location =
@@ -35,6 +37,8 @@ let make_event event_db =
       { url = event_db#!url;
         location = event_db#!location;
         start_date = event_db#!start_date;
+        owner = event_db#!owner;
+        name = event_db#!name;
       }
 
 let get_events () =
@@ -51,18 +55,20 @@ let get_event url =
     | hd :: _ -> Lwt.return (Some hd)
 
 
-let do_insert url location start_date =
+let do_insert url location start_date owner name=
   lwt dbh = get_db () in
   Lwt_Query.query dbh
    <:insert< $events$ := {url = $string:url$;
                           location = $string:location$;
-                          start_date = $int32: start_date$;
+                          start_date = $int32:start_date$;
+                          owner = $string:owner$;
+                          name = $string:name$
                          } >>
 
-let insert url location start_date =
+let insert url location start_date owner name =
   match_lwt (get_event url) with
     | None -> begin
-      lwt _ = do_insert url location start_date in
+      lwt _ = do_insert url location start_date owner name in
       Lwt.return None
       end
     | Some hd -> Lwt.return (Some (make_event hd))

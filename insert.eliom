@@ -26,16 +26,18 @@
         Utils.show_button button_dom;
         let result = Utils.make_event_and_users event attending declined invited in
         let event_data = result.Utils.ev_data in
-        to_insert := Some (url_input, event_data.Fb.venue.Fb.city, event_data.Fb.start_time);
-        Lwt.return_unit
+        to_insert := Some (url_input, event_data.Fb.venue.Fb.city,
+                           event_data.Fb.start_time,
+                           event_data.Fb.owner.Fb.name, event_data.Fb.name);
+         Lwt.return_unit
         end
 }}
 
-let my_insert (url, location, date) =
-  Db.insert url location (Utils.to_epoch date)
+let my_insert (url, location, date, owner, name) =
+  Db.insert url location (Utils.to_epoch date) owner name
 
 let rpc_insert_url =
-  server_function Json.t<(string * string * string)> my_insert
+  server_function Json.t<(string * string * string * string * string)> my_insert
 
 let insert_service unused unused2 =
   let url_input = string_input ~a:[a_class ["form-control"];
