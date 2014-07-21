@@ -264,10 +264,10 @@ let bootstrap_metas = [utf8_meta;
   let replace_event_spans event spans =
     List.iter (fun (span, value) ->
       Html5.Manip.replaceChildren span [pcdata value])
-      [(spans.event_name_span, event.Fb.name);
-       (spans.event_owner_span, event.Fb.owner.Fb.name);
-       (spans.event_venue_span, event.Fb.venue.Fb.city);
-       (spans.event_start_time_span, event.Fb.start_time)]
+      [(spans.event_name_span, event.name);
+       (spans.event_owner_span, event.owner);
+       (spans.event_venue_span, event.location);
+       (spans.event_start_time_span, (epoch_to_light_date event.start_date))]
 
   let print_event event =
     [td [pcdata event.name];

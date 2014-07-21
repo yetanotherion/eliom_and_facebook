@@ -13,9 +13,18 @@
     next_id: int;
   }
 
-  let make_users_in_div ?draggable:(d=true) ?size:(s=16) text =
-    let icon = img ~src:(uri_of_string (fun () -> "imgs/users.png")) ~alt:"users" ~a:[a_height s; a_width s;
-                                                                                      a_draggable d] () in
+  let user_type_to_icon_file x =
+    match x with
+      | `All -> "users.png"
+      | `All_events -> "events_all.png"
+      | `Attended_ref -> "events_ref_attended.png"
+      | `Declined_ref -> "events_ref_declined.png"
+      | `Invited_ref -> "events_ref_invited.png"
+      | `Not_invited_ref -> "events_ref_not_invited.png"
+
+  let make_users_in_div ?usert:(u=`All) ?draggable:(d=true) ?size:(s=16) text =
+    let icon = img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file u))) ~alt:"users" ~a:[a_height s; a_width s;
+                                                                                                          a_draggable d] () in
     [icon; pcdata text]
 
   let make_users_basket_in_div number_of_users =
@@ -41,7 +50,7 @@ let rpc_get_events =
           Lwt.return_unit
         end
         | `Ok event -> begin
-          Utils.replace_event_spans event spans;
+          (* XXX check whether db value should be updated *)
           lwt (attending, declined, invited) = Utils.process_all_rsvp event_url in
            Utils.display_all_rsvp [(attending, spans.Utils.attending_span);
                                    (declined, spans.Utils.declined_span);
@@ -71,8 +80,8 @@ let rpc_get_events =
      next_id = user_sets.next_id + 1;
    }, new_user)
 
- let make_user_button user btn_type text =
-   let res = div (make_users_in_div text) in
+ let make_user_button user utype text =
+   let res = div (make_users_in_div ~usert:utype text) in
    let res_dom = Html5.To_dom.of_element res in
    let open Lwt_js_events in
    let ondragstarts ev _ =
@@ -104,16 +113,16 @@ let rpc_get_events =
    let not_invited_users = Utils.RsvpSet.diff compared_users_set common_invited.users in
    let user_sets, not_invited = append_new_user_set user_sets not_invited_users in
    Html5.Manip.replaceChildren compared_span
-     (List.map (fun (u, x, y) -> make_user_button u x y) [(compared_user, "btn-success",
+     (List.map (fun (u, x, y) -> make_user_button u x y) [(compared_user, `All_events,
                                                            Printf.sprintf "%d" (List.length compared_users));
-                                                          (common_attending, "btn-info",
-                                                           Printf.sprintf "in_attending:%d" (Utils.RsvpSet.cardinal common_attending.users));
-                                                          (common_declined, "btn-warning",
-                                                           Printf.sprintf "in_declined:%d" (Utils.RsvpSet.cardinal common_declined.users));
-                                                          (common_invited, "btn-danger",
-                                                           Printf.sprintf "in_invited:%d" (Utils.RsvpSet.cardinal common_invited.users));
-                                                          (not_invited, "other_style",
-                                                           Printf.sprintf "not_invited:%d" (Utils.RsvpSet.cardinal not_invited.users))]);
+                                                          (common_attending, `Attended_ref,
+                                                           Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_attending.users));
+                                                          (common_declined, `Declined_ref ,
+                                                           Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_declined.users));
+                                                          (common_invited, `Invited_ref,
+                                                           Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_invited.users));
+                                                          (not_invited, `Not_invited_ref,
+                                                           Printf.sprintf "%d" (Utils.RsvpSet.cardinal not_invited.users))]);
    user_sets_ref := user_sets
 }}
 
@@ -122,6 +131,18 @@ let view_service unused unused2 =
   let db_selected_events_span = span [] in
   let all_users_container = ref Utils.RsvpSet.empty in
   let all_users_div = div (make_users_basket_in_div 0) in
+  let legend_info = [(`All_events,
+                      "All corresponding fans.");
+                     (`Attended_ref,
+                      "Subset of corresponding fans that attended to the reference event.");
+                     (`Declined_ref,
+                      "Subset of corresponding fans that declined the reference event's invitation.");
+                     (`Invited_ref,
+                      "Subset of corresponding fans that were invited to the reference event.");
+                     (`Not_invited_ref,
+                      "Subset of corresponding fans that were not invited to the reference event.")] in
+  let in_legend_div = List.map (fun (x, text) -> div (make_users_in_div ~usert:x ~draggable:false ~size:20 text)) legend_info in
+  let legend_div = div in_legend_div in
   let user_sets = ref {
     all_users = [];
     next_id = 0;
@@ -135,7 +156,10 @@ let view_service unused unused2 =
       let trs = List.map (fun x -> tr (Utils.print_event x)) events in
       let db_table = Utils.make_table ["Name"; "Owner"; "Location"; "Date"] trs in
       Html5.Manip.replaceChildren %db_selected_events_span [db_table];
-      let event_and_span = List.map (fun x -> (x, Utils.create_spans (), ref None)) events in
+      let event_and_span = List.map (fun x ->
+        let spans = Utils.create_spans () in
+        let () = Utils.replace_event_spans x spans in
+         (x, spans, ref None)) events in
       let trs = List.map (fun (event, s, _) -> tr (Utils.integrate_spans_in_td s)) event_and_span in
       let table = Utils.make_complete_event_table trs in
       Html5.Manip.replaceChildren %selected_events_span [table];
@@ -188,7 +212,8 @@ let view_service unused unused2 =
                                     [li ~a:[a_class ["active"]] [url_input];
                                      li [db_selected_events_span]]]];
                          div ~a:[a_class ["span9"]] [all_users_div;
-                                                     div ~a:[a_class ["container"]] [selected_events_span]]]]]
+                                                     div ~a:[a_class ["container"]] [selected_events_span];
+                                                     legend_div]]]]
   in
   let b = all_body @ Utils.bs_scripts in
   let h = Utils.bootstrap_metas @ Utils.bs_icons in
