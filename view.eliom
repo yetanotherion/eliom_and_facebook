@@ -50,7 +50,7 @@ let rpc_get_events =
           Lwt.return_unit
         end
         | `Ok event -> begin
-          (* XXX check whether db value should be updated *)
+          (* XXX check whether db value should be updated and update it if so*)
           lwt (attending, declined, invited) = Utils.process_all_rsvp event_url in
            Utils.display_all_rsvp [(attending, spans.Utils.attending_span);
                                    (declined, spans.Utils.declined_span);
@@ -124,12 +124,140 @@ let rpc_get_events =
                                                           (not_invited, `Not_invited_ref,
                                                            Printf.sprintf "%d" (Utils.RsvpSet.cardinal not_invited.users))]);
    user_sets_ref := user_sets
-}}
+
+ let make_selectable_event x =
+   let res = tr ~a:[a_draggable true] (Utils.print_event x) in
+   let res_dom = Html5.To_dom.of_element res in
+   let open Lwt_js_events in
+   let ondragstarts ev _ =
+     let event_id = x.Utils.url in
+     ev##dataTransfer##setData((Js.string "event_id"), (Js.string event_id));
+     Lwt.return_unit
+   in
+   Lwt.async (fun () -> dragstarts res_dom ondragstarts);
+   res
+
+ let on_db_input_changes events_in_db_container db_selected_events_span selected_events_span user_sets _ _ =
+   lwt () = Utils.lwt_autologin () in
+   lwt events = %rpc_get_events () in
+   let () = Utils.Events_store.clear events_in_db_container in
+   let () = List.iter (fun x -> Utils.Events_store.add events_in_db_container x.Utils.url x) events in
+   let trs = List.map make_selectable_event events in
+   let db_table = Utils.make_table ["Name"; "Owner"; "Location"; "Date"] trs in
+   Html5.Manip.replaceChildren db_selected_events_span [db_table];
+   Lwt.return_unit
+
+ let resolve_event selected_events event spans =
+   let event_ref = ref None in
+   let must x = match x with | None -> assert(false) | Some x -> x in
+   lwt () = process_event event spans event_ref in
+   let () = Utils.Events_store.remove selected_events event.Utils.url in
+   let () = Utils.Events_store.add selected_events event.Utils.url (`Resolved (must !event_ref),
+                                                                    spans) in
+   Lwt.return_unit
+
+ let display_differences selected_events ref_event user_sets =
+   let resolved_events = ref [] in
+   let () = Utils.Events_store.iter (fun k (event, spans) ->
+     match event with
+       | `Resolving _ -> ()
+       | `Resolved x -> resolved_events:= (x, spans) :: !resolved_events)
+     selected_events
+   in
+   match !ref_event with
+     | `Undefined | `Resolving (_, _) ->
+       List.iter (fun (_, span) ->
+         List.iter (fun s ->
+           Html5.Manip.replaceChildren s [pcdata "the reference is not computed yet"])
+           [span.Utils.attending_span; span.Utils.declined_span; span.Utils.invited_span]) !resolved_events
+     | `Resolved (x, _) ->
+       List.iter (fun (curr_event, span) ->
+         List.iter (fun (u, s) -> compare_rsvp user_sets x u s)
+           [(curr_event.Utils.attending, span.Utils.attending_span);
+            (curr_event.Utils.declined, span.Utils.declined_span);
+            (curr_event.Utils.invited, span.Utils.invited_span)]) !resolved_events
+
+ let on_user_drop_in_selected_events events_in_db_container ref_event selected_events user_sets selected_events_span ev _ =
+   Dom.preventDefault ev;
+   let data_val = ev##dataTransfer##getData((Js.string "event_id")) in
+   let (data_val: string) = Js.to_string data_val in
+   (* create the UI elements for new selected elements
+      and launch the associated FB requests to compute attending, etc *)
+   let to_resolve_lwt = ref None in
+   let () = match Utils.Events_store.mem selected_events data_val with
+     | false -> let event = Utils.Events_store.find events_in_db_container data_val in
+                let spans = Utils.create_spans () in
+                let () = Utils.replace_event_spans event spans in
+                let () = to_resolve_lwt:= Some (resolve_event selected_events event spans) in
+                Utils.Events_store.add selected_events event.Utils.url ((`Resolving event, spans))
+     | true -> () in
+   (* display the UI with temporarily non available data *)
+   let trs = ref [] in
+   let () = Utils.Events_store.iter (fun _ (_, s) ->
+     trs:= tr (Utils.integrate_spans_in_td s) :: !trs)
+     selected_events in
+   let table = Utils.make_complete_event_table !trs in
+   Html5.Manip.replaceChildren selected_events_span [table];
+   (* wait for the resolution of FB requests *)
+   lwt () = match !to_resolve_lwt with
+     | None -> Lwt.return_unit
+     | Some x -> x
+   in
+   (* compute differences *)
+   let () = display_differences selected_events ref_event user_sets in
+   Lwt.return_unit
+
+ let on_user_drop_in_ref_event events_in_db_container ref_event selected_events user_sets ref_event_span ev _ =
+   Dom.preventDefault ev;
+   let data_val = ev##dataTransfer##getData((Js.string "event_id")) in
+   let (data_val: string) = Js.to_string data_val in
+   let to_resolve_lwt = ref None in
+   let create_new_ref_event () =
+     let event = Utils.Events_store.find events_in_db_container data_val in
+     let spans = Utils.create_spans () in
+     let () = Utils.replace_event_spans event spans in
+     let resolve_ref_event () =
+       let event_ref = ref None in
+       let must x = match x with | None -> assert(false) | Some x -> x in
+       lwt () = process_event event spans event_ref in
+       let () = ref_event := `Resolved (must !event_ref, spans) in
+       Lwt.return_unit
+     in
+     let () = to_resolve_lwt := Some (resolve_ref_event ()) in
+     ref_event:= `Resolving (event, spans)
+   in
+   let () = match !ref_event with
+     | `Undefined -> create_new_ref_event ()
+     | `Resolving (y, _) ->
+       if y.Utils.url = data_val then ()
+       else create_new_ref_event ()
+     | `Resolved (y, _) ->
+       (* XXX add the url in correct_event_res, and do as above *)
+       create_new_ref_event ()
+   in
+   (* display the UI with, maybe, temporarily non available data *)
+   let trs = match !ref_event with
+     | `Undefined -> assert(false)
+     | `Resolved (_, s) | `Resolving (_, s) -> [tr (Utils.integrate_spans_in_td s)]
+   in
+   let table = Utils.make_complete_event_table trs in
+   Html5.Manip.replaceChildren ref_event_span [table];
+   (* wait for the resolution of FB requests *)
+   lwt () = match !to_resolve_lwt with | None -> Lwt.return_unit | Some x -> x in
+   (* compute differences *)
+   let () = display_differences selected_events ref_event user_sets in
+   Lwt.return_unit
+ }}
+
 
 let view_service unused unused2 =
-  let selected_events_span = span [] in
   let db_selected_events_span = span [] in
-  let all_users_container = ref Utils.RsvpSet.empty in
+
+  let selected_events_span = span [] in
+  let selected_events_div = div ~a:[a_class ["container"]] [pcdata "put your selecteds event here"; selected_events_span] in
+  let reference_event_span = span [] in
+  let reference_event_div = div ~a:[a_class ["container"]] [pcdata "put your reference event here"; reference_event_span] in
+
   let all_users_div = div (make_users_basket_in_div 0) in
   let legend_info = [(`All_events,
                       "All corresponding fans.");
@@ -143,44 +271,18 @@ let view_service unused unused2 =
                       "Subset of corresponding fans that were not invited to the reference event.")] in
   let in_legend_div = List.map (fun (x, text) -> div (make_users_in_div ~usert:x ~draggable:false ~size:20 text)) legend_info in
   let legend_div = div in_legend_div in
-  let user_sets = ref {
-    all_users = [];
-    next_id = 0;
-  } in
   let url_input = string_input ~input_type:`Text () in
   let _ = {unit{
+    let selected_events = Utils.Events_store.create 100 in
+    let reference_event = ref `Undefined in
+    let events_in_db_container = Utils.Events_store.create 100 in
+    let all_users_container = ref Utils.RsvpSet.empty in
+    let user_sets = ref {
+      all_users = [];
+      next_id = 0;
+    } in
     let open Lwt_js_events in
-    let onchanges _ _ =
-      lwt () = Utils.lwt_autologin () in
-      lwt events = %rpc_get_events () in
-      let trs = List.map (fun x -> tr (Utils.print_event x)) events in
-      let db_table = Utils.make_table ["Name"; "Owner"; "Location"; "Date"] trs in
-      Html5.Manip.replaceChildren %db_selected_events_span [db_table];
-      let event_and_span = List.map (fun x ->
-        let spans = Utils.create_spans () in
-        let () = Utils.replace_event_spans x spans in
-         (x, spans, ref None)) events in
-      let trs = List.map (fun (event, s, _) -> tr (Utils.integrate_spans_in_td s)) event_and_span in
-      let table = Utils.make_complete_event_table trs in
-      Html5.Manip.replaceChildren %selected_events_span [table];
-      lwt () = Lwt.join (List.map (fun (event, span, user_ref) -> process_event event span user_ref) event_and_span) in
-      match event_and_span with
-        | [] -> Lwt.return_unit
-        | hd :: tl -> begin
-          let (_, spans, event) = hd in
-          let must ev = match !ev with | None -> assert(false) | Some x -> x in
-          let event_ref = must event in
-          List.iter (fun (_, s, other_event) ->
-            let curr_event = must other_event in
-            List.iter (fun (u, s) -> compare_rsvp %user_sets event_ref u s)
-              [(curr_event.Utils.attending, s.Utils.attending_span);
-               (curr_event.Utils.declined, s.Utils.declined_span);
-               (curr_event.Utils.invited, s.Utils.invited_span)])
-            tl;
-          Lwt.return_unit
-        end
-    in
-    async (fun () -> changes (Html5.To_dom.of_element %url_input) onchanges);
+    async (fun () -> changes (Html5.To_dom.of_element %url_input) (on_db_input_changes events_in_db_container %db_selected_events_span %selected_events_span user_sets));
     let ondrop ev _ =
       Dom.preventDefault ev;
       Firebug.console##log("on drops");
@@ -188,9 +290,7 @@ let view_service unused unused2 =
       let (data_val: string) = Js.to_string data_val in
       let button_id = int_of_string data_val in
       Firebug.console##log((Printf.sprintf "Got button_id %d" button_id));
-      let users = %user_sets in
-      let corresponding_user = List.find (fun x -> x.user_id = button_id) (!users).all_users in
-      let all_users_container = %all_users_container in
+      let corresponding_user = List.find (fun x -> x.user_id = button_id) (!user_sets).all_users in
       all_users_container := Utils.RsvpSet.union !all_users_container corresponding_user.users;
       Html5.Manip.replaceChildren %all_users_div (make_users_basket_in_div (Utils.RsvpSet.cardinal !all_users_container));
       Lwt.return_unit
@@ -200,7 +300,13 @@ let view_service unused unused2 =
       Lwt.return_unit
     in
     async (fun () -> dragovers (Html5.To_dom.of_element %all_users_div) ondragover);
-    async (fun () -> drops (Html5.To_dom.of_element %all_users_div) ondrop)
+    async (fun () -> dragovers (Html5.To_dom.of_element %selected_events_div) ondragover);
+    async (fun () -> dragovers (Html5.To_dom.of_element %reference_event_div) ondragover);
+    async (fun () -> drops (Html5.To_dom.of_element %all_users_div) ondrop);
+    async (fun () -> drops (Html5.To_dom.of_element %reference_event_div)
+      (on_user_drop_in_ref_event events_in_db_container reference_event selected_events user_sets %reference_event_span));
+    async (fun () -> drops (Html5.To_dom.of_element %selected_events_div)
+      (on_user_drop_in_selected_events events_in_db_container reference_event selected_events user_sets %selected_events_span));
   }}
   in
   let all_body = [Utils.fb_root_div;
@@ -212,7 +318,8 @@ let view_service unused unused2 =
                                     [li ~a:[a_class ["active"]] [url_input];
                                      li [db_selected_events_span]]]];
                          div ~a:[a_class ["span9"]] [all_users_div;
-                                                     div ~a:[a_class ["container"]] [selected_events_span];
+                                                     reference_event_div;
+                                                     selected_events_div;
                                                      legend_div]]]]
   in
   let b = all_body @ Utils.bs_scripts in
