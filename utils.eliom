@@ -36,11 +36,6 @@
   let epoch_to_tz_date = epoch_to_fmt_date "%Y-%m-%dT%H:%M:%S%z"
   let epoch_to_light_date = epoch_to_fmt_date "%Y-%m-%d %H:%M"
 
-  module Events_store = Hashtbl.Make (struct
-    type t = string
-    let equal = (=)
-    let hash = Hashtbl.hash
-  end)
 }}
 
 let fb_root_div = div ~a:[a_id "fb-root"] []
