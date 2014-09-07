@@ -65,6 +65,7 @@ let find_user user_sets button_id =
 type ui_data = {
   events_in_db_container: Utils.event Events_store.t;
   selected_events: (selected_events * Utils.spans) Events_store.t;
+  resolved_events_cache: Utils.event_and_users Events_store.t;
   mutable ref_event: reference_event;
   mutable user_sets: user_sets;
 }
@@ -72,6 +73,7 @@ type ui_data = {
 let create () = {
  events_in_db_container = Events_store.create 100;
  selected_events = Events_store.create 100;
+ resolved_events_cache = Events_store.create 100;
  ref_event = `Undefined;
  user_sets = create_user_sets ();
 }
@@ -149,6 +151,12 @@ let make_selectable_event x =
  Lwt.async (fun () -> dragstarts res_dom ondragstarts);
  res
 
+let display_resolved_event resolved_event spans =
+  let open Utils in
+  Utils.display_all_rsvp [(resolved_event.attending, spans.attending_span);
+                          (resolved_event.declined, spans.declined_span);
+                          (resolved_event.invited, spans.invited_span)]
+
 let process_event event spans user_ref =
  try_lwt
   let event_url = event.Utils.url in
@@ -161,10 +169,9 @@ let process_event event spans user_ref =
     | `Ok event -> begin
       (* XXX check whether db value should be updated and update it if so*)
       lwt (attending, declined, invited) = Utils.process_all_rsvp event_url in
-      Utils.display_all_rsvp [(attending, spans.Utils.attending_span);
-                              (declined, spans.Utils.declined_span);
-                              (invited, spans.Utils.invited_span)];
-      user_ref := Some (Utils.make_event_and_users event attending declined invited);
+      let resolved_event = Utils.make_event_and_users event attending declined invited in
+      user_ref := Some resolved_event;
+      display_resolved_event resolved_event spans;
       Lwt.return_unit
     end
   with x -> begin
@@ -178,8 +185,11 @@ let resolve_event t event spans =
  let must x = match x with | None -> assert(false) | Some x -> x in
  lwt () = process_event event spans event_ref in
  let () = Events_store.remove t.selected_events event.Utils.url in
- let () = Events_store.add t.selected_events event.Utils.url (`Resolved (must !event_ref),
+ let () = Events_store.remove t.resolved_events_cache event.Utils.url in
+ let resolved_event = must !event_ref in
+ let () = Events_store.add t.selected_events event.Utils.url (`Resolved resolved_event,
                                                               spans) in
+ let () = Events_store.add t.resolved_events_cache event.Utils.url resolved_event in
  Lwt.return_unit
 
 let display_differences t =
@@ -221,11 +231,18 @@ let on_user_drop_in_selected_events t selected_events_span ev _ =
        and launch the associated FB requests to compute attending, etc *)
   let to_resolve_lwt = ref None in
   let () = match Events_store.mem t.selected_events data_val with
-    | false -> let event = Events_store.find t.events_in_db_container data_val in
-               let spans = Utils.create_spans () in
-               let () = Utils.replace_event_spans event spans in
-               let () = to_resolve_lwt:= Some (resolve_event t event spans) in
-               Events_store.add t.selected_events event.Utils.url ((`Resolving event, spans))
+    | false -> begin
+      let event = Events_store.find t.events_in_db_container data_val in
+      let spans = Utils.create_spans () in
+      let () = Utils.replace_event_spans event spans in
+      match Events_store.mem t.resolved_events_cache data_val with
+        | false -> let () = to_resolve_lwt:= Some (resolve_event t event spans) in
+                   Events_store.add t.selected_events event.Utils.url ((`Resolving event, spans))
+        | true -> let resolved_event = Events_store.find t.resolved_events_cache data_val in
+                  let () = Events_store.add t.selected_events event.Utils.url ((`Resolved resolved_event, spans)) in
+                  display_resolved_event resolved_event spans
+
+    end
     | true -> () in
     (* display the UI with temporarily non available data *)
   let trs = ref [] in
@@ -256,11 +273,18 @@ let on_user_drop_in_ref_event t ref_event_span ev _ =
       let event_ref = ref None in
       let must x = match x with | None -> assert(false) | Some x -> x in
       lwt () = process_event event spans event_ref in
-      let () = t.ref_event <- `Resolved (must !event_ref, spans) in
+      let resolved_event = must !event_ref in
+      let () = t.ref_event <- `Resolved (resolved_event, spans) in
+      let () = Events_store.remove t.resolved_events_cache event.Utils.url in
+      let () = Events_store.add t.resolved_events_cache event.Utils.url resolved_event in
       Lwt.return_unit
     in
-    let () = to_resolve_lwt := Some (resolve_ref_event ()) in
-    t.ref_event <- `Resolving (event, spans)
+    match Events_store.mem t.resolved_events_cache data_val with
+      | false -> let () = to_resolve_lwt := Some (resolve_ref_event ()) in
+                 t.ref_event <- `Resolving (event, spans)
+      | true -> let resolved_event = Events_store.find t.resolved_events_cache data_val in
+                let () = t.ref_event <- `Resolved (resolved_event, spans) in
+                display_resolved_event resolved_event spans
   in
   let () = match t.ref_event with
     | `Undefined -> create_new_ref_event ()
