@@ -54,14 +54,17 @@ let bootstrap_metas = [utf8_meta;
   let extract_user user = (user.Fb.user_id, user.Fb.name)
 
   type event_and_users = {
+    ev_url: string;
     ev_data: Fb.correct_event_res;
     attending: event_user list;
     declined: event_user list;
     invited: event_user list;
   }
 
-  let make_event_and_users event attending declined invited =
-    { ev_data = event;
+  let make_event_and_users event_url event attending declined invited =
+    {
+      ev_url = event_url;
+      ev_data = event;
       attending = attending;
       declined = declined;
       invited = invited;

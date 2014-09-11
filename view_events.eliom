@@ -169,7 +169,7 @@ let process_event event spans user_ref =
     | `Ok event -> begin
       (* XXX check whether db value should be updated and update it if so*)
       lwt (attending, declined, invited) = Utils.process_all_rsvp event_url in
-      let resolved_event = Utils.make_event_and_users event attending declined invited in
+      let resolved_event = Utils.make_event_and_users event_url event attending declined invited in
       user_ref := Some resolved_event;
       display_resolved_event resolved_event spans;
       Lwt.return_unit
@@ -292,8 +292,8 @@ let on_user_drop_in_ref_event t ref_event_span ev _ =
       if y.Utils.url = data_val then ()
       else create_new_ref_event ()
     | `Resolved (y, _) ->
-    (* XXX add the url in correct_event_res, and do as above *)
-      create_new_ref_event ()
+      if y.Utils.ev_url = data_val then ()
+      else create_new_ref_event ()
   in
   (* display the UI with, maybe, temporarily non available data *)
   let trs = match t.ref_event with

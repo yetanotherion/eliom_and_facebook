@@ -24,7 +24,7 @@
                                 (declined, declined_s);
                                 (invited, invited_s)];
         Utils.show_button button_dom;
-        let result = Utils.make_event_and_users event attending declined invited in
+        let result = Utils.make_event_and_users url_input event attending declined invited in
         let event_data = result.Utils.ev_data in
         to_insert := Some (url_input, event_data.Fb.venue.Fb.city,
                            event_data.Fb.start_time,
