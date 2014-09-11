@@ -2,20 +2,57 @@
   open Eliom_content
   open Html5.D
   open Eliom_parameter
+  type jsonable_event = {
+    url: string;
+    location: string;
+    start_time: string;
+    owner: string;
+    name: string;
+    nb_attending: int;
+    nb_declined: int;
+    nb_invited: int;
+  }
+  deriving(Json)
+
 }}
-(*647147472010945*)
 
 {client{
+
+  let make_jsonable_event url fb_event attending declined invited = {
+    url = url;
+    location = fb_event.Fb.venue.Fb.city;
+    (* we can only set it in the server
+       as date conversion methods are not available in
+       js_of_eliom. we carry that parameter until we reach
+       the server, and make the conversion there *)
+    start_time = fb_event.Fb.start_time;
+    owner = fb_event.Fb.owner.Fb.name;
+    name = fb_event.Fb.name;
+    nb_attending = List.length attending;
+    nb_declined = List.length declined;
+    nb_invited = List.length invited;
+  }
+
+  let make_event_display_line event attending_span declined_span invited_span =
+    Utils.make_tds [pcdata event.Fb.name;
+                    pcdata event.Fb.owner.Fb.name;
+                    pcdata event.Fb.venue.Fb.city;
+                    pcdata event.Fb.start_time;
+                    attending_span;
+                    declined_span;
+                    invited_span]
+
+
   let process_res res url_input span_elt to_insert button_dom =
     match (Utils.process_event_answer url_input res) with
       | `Err x -> begin
         Html5.Manip.replaceChildren span_elt x;
         Lwt.return_unit end
       | `Ok event -> begin
-          let attending_s, declined_s, invited_s =
-          Utils.make_wait_span (), Utils.make_wait_span (), Utils.make_wait_span ()
+        let attending_s, declined_s, invited_s =
+         Utils.make_wait_span (), Utils.make_wait_span (), Utils.make_wait_span ()
         in
-        let event_line = tr (Utils.make_event_display_line event attending_s declined_s invited_s) in
+        let event_line = tr (make_event_display_line event attending_s declined_s invited_s) in
         let displayed_table = Utils.make_complete_event_table [event_line] in
         Html5.Manip.replaceChildren span_elt [displayed_table];
         lwt res = Utils.process_all_rsvp url_input in
@@ -24,20 +61,26 @@
                                 (declined, declined_s);
                                 (invited, invited_s)];
         Utils.show_button button_dom;
-        let result = Utils.make_event_and_users url_input event attending declined invited in
-        let event_data = result.Utils.ev_data in
-        to_insert := Some (url_input, event_data.Fb.venue.Fb.city,
-                           event_data.Fb.start_time,
-                           event_data.Fb.owner.Fb.name, event_data.Fb.name);
-         Lwt.return_unit
+        to_insert := Some (make_jsonable_event url_input event attending declined invited);
+        Lwt.return_unit
         end
 }}
 
-let my_insert (url, location, date, owner, name) =
-  Db.insert url location (Utils.to_epoch date) owner name
+let my_insert event =
+  (* we make the conversion now *)
+  Db.insert {
+    Utils.url = event.url;
+    Utils.location = event.location;
+    Utils.start_date = Utils.to_epoch event.start_time;
+    Utils.owner = event.owner;
+    Utils.name = event.name;
+    Utils.nb_attending = event.nb_attending;
+    Utils.nb_declined = event.nb_declined;
+    Utils.nb_invited = event.nb_invited;
+  }
 
 let rpc_insert_url =
-  server_function Json.t<(string * string * string * string * string)> my_insert
+  server_function Json.t<jsonable_event> my_insert
 
 let insert_service unused unused2 =
   let url_input = string_input ~a:[a_class ["form-control"];

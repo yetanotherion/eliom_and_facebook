@@ -7,7 +7,10 @@
     location: string;
     start_date: Int32.t;
     owner: string;
-    name: string
+    name: string;
+    nb_attending: int;
+    nb_declined: int;
+    nb_invited: int;
   }
 
   type event_user = String.t * String.t
@@ -255,15 +258,6 @@ let bootstrap_metas = [utf8_meta;
           `Err [div [pcdata (Printf.sprintf "Invalid event, got data instead of event elements")]]
         end
         | Fb.Ok event -> `Ok event
-
-  let make_event_display_line event attending_span declined_span invited_span =
-   make_tds [pcdata event.Fb.name;
-             pcdata event.Fb.owner.Fb.name;
-             pcdata event.Fb.venue.Fb.city;
-             pcdata (epoch_to_light_date (to_epoch event.Fb.start_time));
-             attending_span;
-             declined_span;
-             invited_span]
 
   let replace_event_spans event spans =
     List.iter (fun (span, value) ->

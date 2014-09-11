@@ -25,7 +25,10 @@ let events = <:table< events (
   location text NOT NULL,
   start_date integer NOT NULL,
   owner text NOT NULL,
-  name text NOT NULL
+  name text NOT NULL,
+  nb_attending integer NOT NULL,
+  nb_declined integer NOT NULL,
+  nb_invited integer NOT NULL
 ) >>
 
 let get_urls location =
@@ -39,6 +42,9 @@ let make_event event_db =
         start_date = event_db#!start_date;
         owner = event_db#!owner;
         name = event_db#!name;
+        nb_attending = Int32.to_int event_db#!nb_attending;
+        nb_declined = Int32.to_int event_db#!nb_declined;
+        nb_invited = Int32.to_int event_db#!nb_invited;
       }
 
 let get_events () =
@@ -55,20 +61,24 @@ let get_event url =
     | hd :: _ -> Lwt.return (Some hd)
 
 
-let do_insert url location start_date owner name=
+let do_insert event =
+  let open Utils in
   lwt dbh = get_db () in
   Lwt_Query.query dbh
-   <:insert< $events$ := {url = $string:url$;
-                          location = $string:location$;
-                          start_date = $int32:start_date$;
-                          owner = $string:owner$;
-                          name = $string:name$
+   <:insert< $events$ := {url = $string:event.url$;
+                          location = $string:event.location$;
+                          start_date = $int32:event.start_date$;
+                          owner = $string:event.owner$;
+                          name = $string:event.name$;
+                          nb_attending = $int32:Int32.of_int event.nb_attending$;
+                          nb_declined = $int32:Int32.of_int event.nb_declined$;
+                          nb_invited = $int32:Int32.of_int event.nb_invited$
                          } >>
 
-let insert url location start_date owner name =
-  match_lwt (get_event url) with
+let insert event =
+  match_lwt (get_event event.Utils.url) with
     | None -> begin
-      lwt _ = do_insert url location start_date owner name in
+      lwt _ = do_insert event in
       Lwt.return None
       end
     | Some hd -> Lwt.return (Some (make_event hd))
