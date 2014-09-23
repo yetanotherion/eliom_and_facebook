@@ -42,6 +42,18 @@
                     declined_span;
                     invited_span]
 
+  let display_event_already_inserted event =
+    let inserted_msg = pcdata "Event already inserted" in
+    let tds = Utils.make_tds [pcdata event.Utils.name;
+                              pcdata event.Utils.owner;
+                              pcdata event.Utils.location;
+                              pcdata (Utils.epoch_to_light_date event.Utils.start_date);
+                              pcdata (string_of_int event.Utils.nb_attending);
+                              pcdata (string_of_int event.Utils.nb_declined);
+                              pcdata (string_of_int event.Utils.nb_invited)
+                             ] in
+    [inserted_msg; Utils.make_complete_event_table [tr tds]]
+
 
   let process_res res url_input span_elt to_insert button_dom =
     match (Utils.process_event_answer url_input res) with
@@ -79,8 +91,12 @@ let my_insert event =
     Utils.nb_invited = event.nb_invited;
   }
 
-let rpc_insert_url =
+let rpc_insert_event =
   server_function Json.t<jsonable_event> my_insert
+
+let rpc_event_exists =
+  server_function Json.t<string> Db.get_event
+
 
 let insert_service unused unused2 =
   let url_input = string_input ~a:[a_class ["form-control"];
@@ -101,9 +117,17 @@ let insert_service unused unused2 =
                    Html5.Manip.replaceChildren %span_elt [];
                    let url_input = Js.to_string (Js.Unsafe.coerce url_input_dom)##value in
                    try_lwt begin
-                     lwt res = Utils.lwt_api_event url_input in
-                     lwt () = process_res res url_input %span_elt to_insert button_dom in
-                     Lwt.return_unit
+                     match_lwt %rpc_event_exists url_input with
+                       | None -> begin
+                         lwt res = Utils.lwt_api_event url_input in
+                         lwt () = process_res res url_input %span_elt to_insert button_dom in
+                         Lwt.return_unit
+                       end
+                       | Some event -> begin
+                         let res = display_event_already_inserted event in
+                         Html5.Manip.replaceChildren %span_elt [div ~a:[a_style "text-align:center"] res];
+                         Lwt.return_unit
+                       end
                    end
                    with x -> (Html5.Manip.replaceChildren %span_elt
                                 [div [pcdata (Printf.sprintf "Invalid event %s" (Printexc.to_string x))]];
@@ -117,15 +141,9 @@ let insert_service unused unused2 =
             in
             lwt res =
                 try_lwt
-                  match_lwt (%rpc_insert_url arg) with
+                  match_lwt (%rpc_insert_event arg) with
                     | None -> Lwt.return [pcdata "Event inserted"]
-                    | Some event ->
-                      let inserted_msg = pcdata "Event already inserted" in
-                      let tds = Utils.make_tds [pcdata event.Utils.url;
-                                                pcdata event.Utils.location;
-                                                pcdata (Utils.epoch_to_tz_date event.Utils.start_date)] in
-                      let table = Utils.make_table ["url"; "location"; "start_date"] [tr tds] in
-                      Lwt.return [inserted_msg; table]
+                    | Some event -> Lwt.return (display_event_already_inserted event)
                   with e -> Lwt.return [pcdata (Printf.sprintf "An exception occured with the db: %s" (Printexc.to_string e))]
            in
            Html5.Manip.replaceChildren %span_elt [div ~a:[a_style "text-align:center"] res];

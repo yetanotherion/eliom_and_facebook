@@ -58,7 +58,7 @@ let get_event url =
              <:select< row | row in $events$; row.url = $string:url$ >>)
   with
     | [] -> Lwt.return None
-    | hd :: _ -> Lwt.return (Some hd)
+    | hd :: _ -> Lwt.return (Some (make_event hd))
 
 
 let do_insert event =
@@ -81,4 +81,4 @@ let insert event =
       lwt _ = do_insert event in
       Lwt.return None
       end
-    | Some hd -> Lwt.return (Some (make_event hd))
+    | Some hd -> Lwt.return (Some hd)
