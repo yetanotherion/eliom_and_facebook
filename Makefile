@@ -110,6 +110,7 @@ endif
 objs=$(patsubst %.ml,$(1)/%.$(2),$(patsubst %.eliom,$(1)/%.$(2),$(filter %.eliom %.ml,$(3))))
 depsort=$(call objs,$(1),$(2),$(call eliomdep,$(3),$(4),$(5)))
 
+
 ##----------------------------------------------------------------------
 ## Config files
 
@@ -173,6 +174,12 @@ ${ELIOM_SERVER_DIR}/%.cmi: %.mli
 
 ${ELIOM_SERVER_DIR}/%.cmi: %.eliomi
 	${ELIOMC} -c ${SERVER_INC} $(GENERATE_DEBUG) $<
+
+%.ml: %.mll
+	ocamllex $<
+
+%.mli: %.mly
+	ocamlyacc $<
 
 ${ELIOM_SERVER_DIR}/%.cmo: %.ml
 	${ELIOMC} -c ${SERVER_INC} $(GENERATE_DEBUG) $<

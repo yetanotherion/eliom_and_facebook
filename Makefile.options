@@ -6,7 +6,16 @@
 PROJECT_NAME := mb
 
 # Source files for the server
-SERVER_FILES := $(wildcard *.eliomi *.eliom) db.ml
+
+# XXX:
+# event_query_lexer.mll and event_query.mly are not directly
+# written in SERVER_FILES, but their generated files are put instead
+# not that event_query.mli is put instead of event_query.ml so that
+# ocamldep is executed in event_query.mli, and thus detects the dependency
+# to event_query_ast.ml.
+# a patch to eliom-distillery, to support the generation of .mll/.mly
+# would fix such issues.
+SERVER_FILES := $(wildcard *.eliomi *.eliom) db.ml event_query_ast.ml event_query_parser.mli event_query_parser.ml event_query_lexer.ml
 # Source files for the client
 CLIENT_FILES := $(wildcard *.eliomi *.eliom)
 
