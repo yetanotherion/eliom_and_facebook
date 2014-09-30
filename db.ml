@@ -31,10 +31,6 @@ let events = <:table< events (
   nb_invited integer NOT NULL
 ) >>
 
-let get_urls location =
-  lwt dbh = get_db () in
-  Lwt_Query.query dbh <:select< r | r in $events$; r.location = $string:location$ >>
-
 let make_event event_db =
   let open Utils in
       { url = event_db#!url;
@@ -82,3 +78,67 @@ let insert event =
       Lwt.return None
       end
     | Some hd -> Lwt.return (Some hd)
+
+let parse_query str =
+   let lexbuf = Lexing.from_string str in
+   Event_query_parser.main Event_query_lexer.token lexbuf
+
+let single_expr_view sexpr table =
+  match sexpr with
+    | `Attending (op, int) -> begin
+      match op with
+        | `Eqop `Eq -> << row | row in $table$; row.nb_attending = $int32:Int32.of_int int$ >>
+        | `Eqop `Neq -> << row | row in $table$; row.nb_attending <> $int32:Int32.of_int int$ >>
+        | `Diffop `Gte -> << row | row in $table$; row.nb_attending >= $int32:Int32.of_int int$ >>
+        | `Diffop `Lte -> << row | row in $table$; row.nb_attending <= $int32:Int32.of_int int$ >>
+        | `Diffop `Gt -> << row | row in $table$; row.nb_attending > $int32:Int32.of_int int$ >>
+        | `Diffop `Lt -> << row | row in $table$; row.nb_attending < $int32:Int32.of_int int$ >>
+      end
+   | `Declined (op, int) -> begin
+      match op with
+        | `Eqop `Eq -> << row | row in $table$; row.nb_declined = $int32:Int32.of_int int$ >>
+        | `Eqop `Neq -> << row | row in $table$; row.nb_declined <> $int32:Int32.of_int int$ >>
+        | `Diffop `Gte -> << row | row in $table$; row.nb_declined >= $int32:Int32.of_int int$ >>
+        | `Diffop `Lte -> << row | row in $table$; row.nb_declined <= $int32:Int32.of_int int$ >>
+        | `Diffop `Gt -> << row | row in $table$; row.nb_declined > $int32:Int32.of_int int$ >>
+        | `Diffop `Lt -> << row | row in $table$; row.nb_declined < $int32:Int32.of_int int$ >>
+      end
+   | `Invited (op, int) -> begin
+      match op with
+        | `Eqop `Eq -> << row | row in $table$; row.nb_invited = $int32:Int32.of_int int$ >>
+        | `Eqop `Neq -> << row | row in $table$; row.nb_invited <> $int32:Int32.of_int int$ >>
+        | `Diffop `Gte -> << row | row in $table$; row.nb_invited >= $int32:Int32.of_int int$ >>
+        | `Diffop `Lte -> << row | row in $table$; row.nb_invited <= $int32:Int32.of_int int$ >>
+        | `Diffop `Gt -> << row | row in $table$; row.nb_invited > $int32:Int32.of_int int$ >>
+        | `Diffop `Lt -> << row | row in $table$; row.nb_invited < $int32:Int32.of_int int$ >>
+      end
+   | `Location (eqop, string) -> begin
+      match eqop with
+        | `Eq -> << row | row in $table$; row.location = $string:string$ >>
+        | `Neq -> << row | row in $table$; row.location <> $string:string$ >>
+      end
+   | `Owner (eqop, string) -> begin
+      match eqop with
+        | `Eq -> << row | row in $table$; row.owner = $string:string$ >>
+        | `Neq -> << row | row in $table$; row.owner <> $string:string$ >>
+      end
+   | `Name (eqop, string) -> begin
+      match eqop with
+        | `Eq -> << row | row in $table$; row.name = $string:string$ >>
+        | `Neq -> << row | row in $table$; row.name <> $string:string$ >>
+      end
+
+
+let rec event_ast_to_view table ast =
+  match ast with
+    | `Or (expr1, expr2) -> << union $event_ast_to_view table expr1$ $event_ast_to_view table expr2$ >>
+    | `And (expr1, expr2) -> let table2 = <<row | row in $event_ast_to_view table expr1$ >> in
+                              << row | row in $event_ast_to_view table2 expr2$ >>
+    | `Single (sexpr) ->  single_expr_view sexpr table
+
+let get_events_from_query query =
+  let lexbuf = Lexing.from_string query in
+  let ast = Event_query_parser.main Event_query_lexer.token lexbuf in
+  lwt dbh = get_db () in
+  lwt events = Lwt_Query.view dbh (event_ast_to_view << row | row in $events$ >> ast) in
+  Lwt.return (List.map make_event events)

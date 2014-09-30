@@ -29,10 +29,18 @@ let view_service unused unused2 =
   let url_input = string_input ~input_type:`Text () in
   let _ = {unit{
     let open View_events in
+    let open Lwt_js_events in
     let t = create () in
     let all_users_container = ref Utils.RsvpSet.empty in
-    let open Lwt_js_events in
-    async (fun () -> changes (Html5.To_dom.of_element %url_input) (View_events.on_db_input_changes t %db_selected_events_span %selected_events_span));
+    async (fun () ->
+      lwt () = Utils.lwt_autologin () in
+      lwt events = %View_events.rpc_get_events None in
+      lwt () = set_events t events %db_selected_events_span in
+      Lwt.return_unit
+    );
+    async (fun () ->
+      let dom_element = Html5.To_dom.of_element %url_input in
+      changes dom_element (View_events.on_db_input_changes t dom_element %db_selected_events_span));
     let ondrop ev _ =
       Dom.preventDefault ev;
       Firebug.console##log("on drops");

@@ -1,5 +1,9 @@
-let my_get () = Db.get_events ()
-let rpc_get_events = server_function Json.t<unit> my_get
+let get_query query =
+  match query with
+    | None -> Db.get_events ()
+    | Some x -> Db.get_events_from_query x
+
+let rpc_get_events = server_function Json.t<string option> get_query
 
 {shared{
   open Eliom_content
@@ -213,14 +217,22 @@ let display_differences t =
           (curr_event.Utils.declined, span.Utils.declined_span);
           (curr_event.Utils.invited, span.Utils.invited_span)]) !resolved_events
 
-let on_db_input_changes t db_selected_events_span selected_events_span _ _ =
-  lwt () = Utils.lwt_autologin () in
-  lwt events = %rpc_get_events () in
+let set_events t events db_selected_events_span =
   let () = Events_store.clear t.events_in_db_container in
   let () = List.iter (fun x -> Events_store.add t.events_in_db_container x.Utils.url x) events in
   let trs = List.map make_selectable_event events in
   let db_table = Utils.make_table ["Name"; "Owner"; "Location"; "Date"] trs in
   Html5.Manip.replaceChildren db_selected_events_span [db_table];
+  Lwt.return_unit
+
+let on_db_input_changes t url_input db_selected_events_span ev _ =
+  let query =
+    match (Js.to_string (Js.Unsafe.coerce url_input)##value) with
+      | "" -> None
+      | str -> Some str
+  in
+  lwt events = %rpc_get_events query in
+  lwt () = set_events t events db_selected_events_span in
   Lwt.return_unit
 
 let on_user_drop_in_selected_events t selected_events_span ev _ =
