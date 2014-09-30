@@ -11,10 +11,14 @@ let parse_query str =
 
 let assert_ast_eq x y =
   let open Event_query_ast in
-      if Pervasives.compare x y != 0 then
-        raise (Failure (Printf.sprintf "%s != %s" (expr_to_string x) (expr_to_string y)));;
+  if Pervasives.compare x y != 0 then
+    raise (Failure (Printf.sprintf "%s != %s" (expr_to_string x) (expr_to_string y)));;
 
-let assert_ast query expected_ast = assert_ast_eq (parse_query query) expected_ast;;
+let assert_ast query expected_ast =
+  try
+    assert_ast_eq (parse_query query) expected_ast
+  with _ ->
+    raise (Failure (Printf.sprintf "query: %s could not be parsed" query))
 
 let test_ast () =
   let () = assert_ast "location = Toulouse" (`Single (`Location (`Eq, "Toulouse"))) in
@@ -28,5 +32,9 @@ let test_ast () =
   assert_ast "location:Toulouse owner:Ulmet or nb_attending >= 2" (`And (`Single (`Location (`Eq, "Toulouse")),
                                                                          `Or (`Single (`Owner (`Eq, "Ulmet")),
                                                                               `Single (`Attending (`Diffop `Gte, 2)))));;
+  assert_ast "owner:\"Raphael Ulmet\"" (`Single (`Owner (`Eq, "Raphael Ulmet")));;
+  assert_ast "owner:' Raphael Ulmet '" (`Single (`Owner (`Eq, " Raphael Ulmet ")));;
+  (* XXX deactivated for now *)
+  assert_ast "owner:' Raphaël Ulmet '" (`Single (`Owner (`Eq, " Raphaël Ulmet ")));;
 
 let () = test_ast ();;

@@ -1,42 +1,76 @@
 %token LPAREN RPAREN AND OR EOF
+%token <string> STR WHITESPACES
 %left OR
 %token ATTENDING DECLINED INVITED
 %token SUP INF EXCLM EQ COLON
+%token DQUOTE SQUOTE
 %token LOCATION OWNER NAME
-%token <int> INT
-%token <string> STR
 %start main
 %type <Event_query_ast.expr> main
 %%
 
 main:
-    expr EOF { $1 }
+    stripped_expr EOF { $1 }
 
 expr:
-   LPAREN expr RPAREN { $2 }
- | one_rule expr { `And (`Single $1, $2)}
- | expr OR expr { `Or ($1, $3) }
+   LPAREN stripped_expr RPAREN { $2 }
+ | expr WHITESPACES expr { `And ($1, $3)}
+ | expr WHITESPACES OR WHITESPACES expr { `Or ($1, $5) }
  | one_rule { `Single $1 }
 
+stripped_expr:
+ | WHITESPACES expr { $2 }
+ | expr WHITESPACES { $1 }
+ | WHITESPACES expr WHITESPACES { $2 }
+ | expr { $1 }
+
 one_rule:
-   ATTENDING op INT { `Attending ($2, $3)}
- | DECLINED op INT { `Declined ($2, $3)}
- | INVITED op INT { `Invited ($2, $3)}
- | LOCATION eq_op STR { `Location ($2, $3) }
- | OWNER eq_op STR { `Owner ($2, $3) }
- | NAME eq_op STR { `Name ($2, $3) }
+   ATTENDING op int { `Attending ($2, $3)}
+ | DECLINED op int { `Declined ($2, $3)}
+ | INVITED op int { `Invited ($2, $3)}
+ | LOCATION optional_ws_eqop str { `Location ($2, $3) }
+ | OWNER optional_ws_eqop str { `Owner ($2, $3) }
+ | NAME optional_ws_eqop str { `Name ($2, $3) }
+
+int:
+   STR { int_of_string($1) }
+
+str:
+   STR { $1 }
+ | DQUOTE in_quote DQUOTE { $2 }
+ | SQUOTE in_quote SQUOTE { $2 }
+
+in_quote:
+ | string_or_ws in_quote { $1 ^ $2 }
+ | string_or_ws { $1 }
+
+string_or_ws:
+ | WHITESPACES { $1 }
+ | STR { $1 }
 
 op:
-   diff_op { `Diffop $1 }
- | eq_op { `Eqop $1 }
+   optional_ws_diffop { `Diffop $1 }
+ | optional_ws_eqop { `Eqop $1 }
+
+optional_ws_diffop:
+ | diff_op { $1 }
+ | diff_op WHITESPACES { $1 }
+ | WHITESPACES diff_op { $2 }
+ | WHITESPACES diff_op WHITESPACES { $2 }
 
 diff_op:
-   SUP EQ { `Gte }
+ | SUP EQ { `Gte }
  | INF EQ { `Lte }
  | SUP { `Gt }
  | INF { `Lt }
 
+optional_ws_eqop:
+ | eq_op { $1 }
+ | eq_op WHITESPACES { $1 }
+ | WHITESPACES eq_op { $2 }
+ | WHITESPACES eq_op WHITESPACES { $2 }
+
 eq_op:
-   EQ { `Eq }
+ | EQ { `Eq }
  | COLON { `Eq }
  | EXCLM EQ { `Neq }

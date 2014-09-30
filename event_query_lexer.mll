@@ -3,8 +3,6 @@
 }
 
 rule token = parse
-           [' ' '\t']     { token lexbuf }     (* skip blanks *)
-          | ['0'-'9']+ as lxm { INT(int_of_string lxm) }
           | "OR" | "or"    { OR }
           | '('            { LPAREN }
           | ')'            { RPAREN }
@@ -13,11 +11,15 @@ rule token = parse
           | '<'            { INF }
           | '!'            { EXCLM }
           | ':'            { COLON }
-          | "nb_attending" {ATTENDING}
-          | "nb_declined" {DECLINED}
-          | "nb_invited" {INVITED}
-          | "location" {LOCATION}
-          | "name" {NAME}
-          | "owner" {OWNER}
-          | ['a'-'z''A'-'Z']+ as str { STR(str) }
+          | '"'            { DQUOTE }
+          | '\''           { SQUOTE }
+          | [' ']+ as ws   { WHITESPACES(ws) }
+          | "nb_attending" { ATTENDING }
+          | "nb_declined"  { DECLINED }
+          | "nb_invited"   { INVITED }
+          | "location"     { LOCATION }
+          | "name"         { NAME }
+          | "owner"        { OWNER }
+          | ['\x00'-'\x1F''#'-'&''*'-'9'';''?'-'\xff']+ as str { STR(str) }
+          (* XXX: add rule to catch non ascii bytes *)
           | eof            { EOF }
