@@ -136,9 +136,11 @@ let rec event_ast_to_view table ast =
                               << row | row in $event_ast_to_view table2 expr2$ >>
     | `Single (sexpr) ->  single_expr_view sexpr table
 
-let get_events_from_query query =
+let get_events_from_query ?limit:(l=10) ?offset:(o=0l) query =
   let lexbuf = Lexing.from_string query in
   let ast = Event_query_parser.main Event_query_lexer.token lexbuf in
   lwt dbh = get_db () in
-  lwt events = Lwt_Query.view dbh (event_ast_to_view << row | row in $events$ >> ast) in
+  let event_view = event_ast_to_view << row | row in $events$ >> ast in
+  let limited_view = << row order by row.start_date limit $int32:Int32.of_int l$ offset $int32:o$ | row in $event_view$ >> in
+  lwt events = Lwt_Query.view dbh limited_view in
   Lwt.return (List.map make_event events)
