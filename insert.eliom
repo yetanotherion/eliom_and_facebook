@@ -72,7 +72,7 @@
         Utils.display_all_rsvp [(attending, attending_s);
                                 (declined, declined_s);
                                 (invited, invited_s)];
-        Utils.show_button button_dom;
+        Utils.show_element button_dom;
         to_insert := Some (make_jsonable_event url_input event attending declined invited);
         Lwt.return_unit
         end
@@ -113,7 +113,7 @@ let insert_service unused unused2 =
         let url_input_dom = Html5.To_dom.of_element %url_input in
         ignore(changes url_input_dom
                  (fun _ _ ->
-                   Utils.hidde_button button_dom;
+                   Utils.hidde_element button_dom;
                    Html5.Manip.replaceChildren %span_elt [];
                    let url_input = Js.to_string (Js.Unsafe.coerce url_input_dom)##value in
                    try_lwt begin
@@ -147,7 +147,7 @@ let insert_service unused unused2 =
                   with e -> Lwt.return [pcdata (Printf.sprintf "An exception occured with the db: %s" (Printexc.to_string e))]
            in
            Html5.Manip.replaceChildren %span_elt [div ~a:[a_style "text-align:center"] res];
-           Utils.hidde_button button_dom;
+           Utils.hidde_element button_dom;
            to_insert := None;
            Lwt.return ())
       )

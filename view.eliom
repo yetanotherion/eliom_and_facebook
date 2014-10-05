@@ -9,11 +9,11 @@ let view_service unused unused2 =
   let db_selected_events_span = span [] in
 
   let selected_events_span = span [] in
-  let selected_events_div = div ~a:[a_class ["container"]] [pcdata "put your selecteds event here"; selected_events_span] in
+  let selected_events_div = div ~a:[a_class ["container"]] [pcdata "put your selected events here"; selected_events_span] in
   let reference_event_span = span [] in
   let reference_event_div = div ~a:[a_class ["container"]] [pcdata "put your reference event here"; reference_event_span] in
 
-  let all_users_div = div (View_events.make_users_basket_in_div 0) in
+  let all_users_div = div ~a:[a_class ["hidden"]] (View_events.make_users_basket_in_div 0) in
   let legend_info = [(`All_events,
                       "All corresponding fans.");
                      (`Attended_ref,
@@ -25,18 +25,21 @@ let view_service unused unused2 =
                      (`Not_invited_ref,
                       "Subset of corresponding fans that were not invited to the reference event.")] in
   let in_legend_div = List.map (fun (x, text) -> div (View_events.make_users_in_div ~usert:x ~draggable:false ~size:20 text)) legend_info in
-  let legend_div = div in_legend_div in
+  let legend_div = div ~a:[a_class ["hidden"]] in_legend_div in
+  let user_select_ui_div =  div ~a:[a_class ["span9"]] [all_users_div;
+                                                        reference_event_div;
+                                                        selected_events_div;
+                                                        legend_div] in
+
   let url_input = string_input ~input_type:`Text () in
   let _ = {unit{
     let open View_events in
     let open Lwt_js_events in
-    let t = create () in
+    let t = create %all_users_div %reference_event_div %selected_events_div %legend_div in
     let all_users_container = ref Utils.RsvpSet.empty in
     async (fun () ->
       lwt () = Utils.lwt_autologin () in
-      lwt events = %View_events.rpc_get_events None in
-      lwt () = set_events t events %db_selected_events_span in
-      Lwt.return_unit
+      View_events.get_and_record_events t None %db_selected_events_span
     );
     async (fun () ->
       let dom_element = Html5.To_dom.of_element %url_input in
@@ -75,11 +78,7 @@ let view_service unused unused2 =
                                 [ul ~a:[a_class ["nav"; "nav-list"]]
                                     [li ~a:[a_class ["active"]] [url_input];
                                      li [db_selected_events_span]]]];
-                         div ~a:[a_class ["span9"]] [all_users_div;
-                                                     reference_event_div;
-                                                     selected_events_div;
-                                                     legend_div]]]]
-  in
+                         user_select_ui_div]]] in
   let b = all_body @ Utils.bs_scripts in
   let h = Utils.bootstrap_metas @ Utils.bs_icons in
   Lwt.return (Eliom_tools.D.html ~title: "advertise your event"

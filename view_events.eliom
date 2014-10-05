@@ -1,9 +1,8 @@
-let get_query query =
-  match query with
-    | None -> Db.get_events ()
-    | Some x -> Db.get_events_from_query x
+let get_query arg =
+  let queryo, l, o = arg in
+  Db.get_events_from_query ~limit:l ~offset:o queryo
 
-let rpc_get_events = server_function Json.t<string option> get_query
+let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> get_query
 
 {shared{
   open Eliom_content
@@ -31,6 +30,13 @@ let rpc_get_events = server_function Json.t<string option> get_query
 }}
 
 {client{
+
+let make_next () =
+  span ~a:[a_id "next"; a_class ["nvgt"]] []
+
+let make_prev () =
+  span ~a:[a_id "prev"; a_class ["nvgt"]] []
+
 
 module Events_store = Hashtbl.Make (struct
   type t = string
@@ -66,21 +72,68 @@ let create_user_sets () = {
 let find_user user_sets button_id =
   List.find (fun x -> x.user_id = button_id) user_sets.all_users
 
-type ui_data = {
+type 'a ui_data = {
   events_in_db_container: Utils.event Events_store.t;
   selected_events: (selected_events * Utils.spans) Events_store.t;
   resolved_events_cache: Utils.event_and_users Events_store.t;
+  nb_event_per_request: int;
+  all_user_div: Dom_html.element Js.t;
+  reference_event_div: Dom_html.element Js.t;
+  selected_events_div: Dom_html.element Js.t;
+  legend_div: Dom_html.element Js.t;
   mutable ref_event: reference_event;
   mutable user_sets: user_sets;
+  mutable curr_offset: Int32.t;
+  mutable curr_query: string option;
+  mutable buttons_to_move: 'a Eliom_content.Html5.elt list;
+  mutable buttons_move: ('a Eliom_content.Html5.elt * Animation.move list list) option;
 }
 
-let create () = {
- events_in_db_container = Events_store.create 100;
- selected_events = Events_store.create 100;
- resolved_events_cache = Events_store.create 100;
- ref_event = `Undefined;
- user_sets = create_user_sets ();
-}
+let create all_user_div reference_event_div selected_events_div legend_div =
+  let res = { events_in_db_container = Events_store.create 100;
+    selected_events = Events_store.create 100;
+    resolved_events_cache = Events_store.create 100;
+    nb_event_per_request = 5;
+    all_user_div = Html5.To_dom.of_element all_user_div;
+    reference_event_div = Html5.To_dom.of_element reference_event_div;
+    selected_events_div = Html5.To_dom.of_element selected_events_div;
+    legend_div = Html5.To_dom.of_element legend_div;
+    ref_event = `Undefined;
+    user_sets = create_user_sets ();
+    curr_offset = 0l;
+    curr_query = None;
+    buttons_to_move = [];
+    buttons_move = None;
+  } in
+  let () = Random.self_init () in
+  let print_coord label elem =
+    let top, left, right, bottom = Utils.getBoundingClientRectCoordinates elem in
+    Firebug.console##log(Js.string (Printf.sprintf "%s=top: %f, left: %f, right: %f, bottom:%f\n" label top left right bottom));
+  in
+  print_coord "all_user_div" res.all_user_div;
+  let movebuttons () =
+    match res.buttons_move with
+      | None -> begin
+        match res.buttons_to_move with
+          | [] -> ()
+          | hd :: _ ->
+            let top, left, right, bottom = Utils.getBoundingClientRectCoordinates res.all_user_div in
+            let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element hd) in
+            if not !Animation.move_done then (
+              res.buttons_move <- Some (hd, Animation.compute_funny_move curr_top curr_left top left);
+              Animation.move_done := true)
+      end
+      | Some (x, l) -> begin
+        match l with
+          | [] -> res.buttons_move <- None
+          | hd :: tl -> (
+            Animation.do_move x hd;
+            res.buttons_move <- Some (x, tl))
+      end
+  in
+  ignore (Dom_html.window##setInterval(Js.wrap_callback movebuttons,
+                                       0.05 *. 1000.));
+  res
 
 let common_users l1 l2 =
   Utils.RsvpSet.inter (Utils.make_rsvp_set l1) (Utils.make_rsvp_set l2)
@@ -98,8 +151,13 @@ let append_new_user_set user_sets users =
     next_id = user_sets.next_id + 1;
   }, new_user)
 
-let make_user_button user utype text =
-  let res = div (make_users_in_div ~usert:utype text) in
+let make_user_button t user utype text =
+  let button = make_users_in_div ~usert:utype text in
+  let res = div button in
+  let () = match button with
+    | hd :: _ -> t.buttons_to_move <- hd :: t.buttons_to_move
+    | _ -> ()
+  in
   let res_dom = Html5.To_dom.of_element res in
   let open Lwt_js_events in
   let ondragstarts ev _ =
@@ -131,7 +189,7 @@ let compare_rsvp t event compared_users compared_span =
   let not_invited_users = Utils.RsvpSet.diff compared_users_set common_invited.users in
   let user_sets, not_invited = append_new_user_set user_sets not_invited_users in
   Html5.Manip.replaceChildren compared_span
-    (List.map (fun (u, x, y) -> make_user_button u x y) [(compared_user, `All_events,
+    (List.map (fun (u, x, y) -> make_user_button t u x y) [(compared_user, `All_events,
                                                           Printf.sprintf "%d" (List.length compared_users));
                                                          (common_attending, `Attended_ref,
                                                           Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_attending.users));
@@ -204,36 +262,86 @@ let display_differences t =
      | `Resolved x -> resolved_events:= (x, spans) :: !resolved_events)
    t.selected_events
  in
+ let ref_event_resolved =
  match t.ref_event with
-   | `Undefined | `Resolving (_, _) ->
+   | `Undefined | `Resolving (_, _) -> begin
      List.iter (fun (_, span) ->
        List.iter (fun s ->
          Html5.Manip.replaceChildren s [pcdata "the reference is not computed yet"])
-         [span.Utils.attending_span; span.Utils.declined_span; span.Utils.invited_span]) !resolved_events
-   | `Resolved (x, _) ->
+         [span.Utils.attending_span; span.Utils.declined_span; span.Utils.invited_span]) !resolved_events;
+     false
+   end
+   | `Resolved (x, _) -> begin
      List.iter (fun (curr_event, span) ->
        List.iter (fun (u, s) -> compare_rsvp t x u s)
          [(curr_event.Utils.attending, span.Utils.attending_span);
           (curr_event.Utils.declined, span.Utils.declined_span);
-          (curr_event.Utils.invited, span.Utils.invited_span)]) !resolved_events
+          (curr_event.Utils.invited, span.Utils.invited_span)]) !resolved_events;
+     true
+   end
+ in
+ if List.length !resolved_events > 0 && ref_event_resolved then (
+   Utils.show_element t.all_user_div;
+   Utils.show_element t.legend_div)
 
-let set_events t events db_selected_events_span =
+let make_rpc_get_events_args ?offset:(o=0l) t queryo =
+  (queryo, t.nb_event_per_request, o)
+
+let rec get_and_record_events t queryo db_selected_events_span =
+   let compute_link next_offset link_type =
+     (* we make an a, pointing to a static service output "",
+        as the browser do not display other elements as a link instead *)
+     let link =
+       match link_type with
+         | `Next -> make_next ()
+         | `Prev -> make_prev ()
+     in
+     let clickh _ _ =
+        t.curr_offset <- next_offset;
+        get_and_record_events t t.curr_query db_selected_events_span
+     in
+     let open Lwt_js_events in
+     async (fun () -> clicks (Html5.To_dom.of_element link) clickh);
+     link
+   in
+   let compute_prev_next_handlers events =
+     let events_length = List.length events in
+     let links = ref [] in
+     let nb_event_per_request = Int32.of_int t.nb_event_per_request in
+     let next_offset = Int32.add t.curr_offset nb_event_per_request in
+     if t.curr_offset <> 0l then begin
+       let prev_offset = Int32.sub t.curr_offset nb_event_per_request in
+       links := (compute_link prev_offset `Prev) :: !links
+     end;
+     (* XXX find a better way to write that if *)
+     lwt () = if events_length  == t.nb_event_per_request then (
+       lwt events = %rpc_get_events (make_rpc_get_events_args t queryo ~offset:next_offset) in
+       if List.length events > 0 then links := !links @ [compute_link next_offset `Next];
+       Lwt.return_unit)
+              else Lwt.return_unit
+     in
+     t.curr_offset <- next_offset;
+     Lwt.return !links
+  in
   let () = Events_store.clear t.events_in_db_container in
+  t.curr_query <- queryo;
+  lwt events = %rpc_get_events (make_rpc_get_events_args t queryo ~offset:t.curr_offset)  in
   let () = List.iter (fun x -> Events_store.add t.events_in_db_container x.Utils.url x) events in
   let trs = List.map make_selectable_event events in
-  let db_table = Utils.make_table ["Name"; "Owner"; "Location"; "Date"] trs in
-  Html5.Manip.replaceChildren db_selected_events_span [db_table];
+  let db_table = Utils.make_table ~additional_class:["db_container"] ["Name"; "Owner"; "Location"; "Date"] trs in
+  lwt other_links = compute_prev_next_handlers events in
+  let new_span = [db_table] @ other_links in
+  Html5.Manip.replaceChildren db_selected_events_span new_span ;
   Lwt.return_unit
 
 let on_db_input_changes t url_input db_selected_events_span ev _ =
-  let query =
+  let queryo =
     match (Js.to_string (Js.Unsafe.coerce url_input)##value) with
       | "" -> None
       | str -> Some str
   in
-  lwt events = %rpc_get_events query in
-  lwt () = set_events t events db_selected_events_span in
-  Lwt.return_unit
+  t.curr_offset <- 0l;
+  get_and_record_events t queryo db_selected_events_span
 
 let on_user_drop_in_selected_events t selected_events_span ev _ =
   Dom.preventDefault ev;

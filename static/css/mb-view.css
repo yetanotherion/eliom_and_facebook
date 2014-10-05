@@ -6,6 +6,35 @@ body {
     padding: 9px 0;
 }
 
+.db_container {
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+div.hidden { visibility: hidden }
+
+.nvgt{
+	position: absolute;
+	top: 50px;
+	height: 30px;
+	width: 15px;
+	opacity: 0.6;
+}
+
+.nvgt:hover{
+	opacity: 0.9;
+}
+
+#prev{
+	background: #000 url('../imgs/prev.png') no-repeat center;
+	left: 0px;
+}
+
+#next{
+	background: #000 url('../imgs/next.png') no-repeat center;
+	right: 0px;
+}
+
 @media (max-width: 980px) {
     /* Enable use of floated navbar text */
     .navbar-text.pull-right {

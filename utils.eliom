@@ -51,6 +51,31 @@ let bootstrap_metas = [utf8_meta;
                                  a_content "IE=edge"] ()]
 
 {client{
+
+  let getBoundingClientRect element = element##getBoundingClientRect()
+
+  let getBoundingClientRectCoordinates element =
+    let box = getBoundingClientRect element in
+    box##top, box##left, box##right, box##bottom
+
+  let getOffsetRect element =
+    let box = getBoundingClientRect element in
+    let body = Dom_html.document##body in
+    let window = Dom_html.window in
+    let docElement = Dom_html.document##documentElement in
+    (* we don't support IE < 9
+       http://javascript.info/tutorial/coordinates
+    *)
+    (*let scrollTop = Js.parseInt window##pageYOffset in
+    let scrollLeft = Js.parseInt window##pageXOffset in
+    let clientTop = Js.parseInt docElement##clientTop in
+    let clientLeft = Js.parseInt docElement##clientLeft in *)
+    let top = (Js.parseInt box##top) (*+ scrollTop - clientTop *) in
+    let left = (Js.parseInt box##left) (* + scrollLeft - clientLeft*) in
+    let right = (Js.parseInt box##right) in
+    let bottom = (Js.parseInt box##bottom) in
+    top, left, right, bottom
+
   let make_rsvp_set rsvp_list =
     List.fold_left (fun s elt -> RsvpSet.add elt s) RsvpSet.empty rsvp_list
 
@@ -155,11 +180,11 @@ let bootstrap_metas = [utf8_meta;
               @ (List.map (fun x -> td [x]) wait_msg_spans) in
     tr tds
 
-  let hidde_button elt =
+  let hidde_element elt =
     if not (Js.to_bool (elt##classList##contains(Js.string "hidden")))
     then elt##classList##add(Js.string "hidden")
 
-  let show_button elt =
+  let show_element elt =
     if (Js.to_bool (elt##classList##contains(Js.string "hidden")))
     then elt##classList##remove(Js.string "hidden")
 
@@ -237,12 +262,13 @@ let bootstrap_metas = [utf8_meta;
               spans.declined_span;
               spans.invited_span]
 
-  let make_table columns_name trs =
+  let make_table ?additional_class:(add_cl=[]) columns_name trs =
     let curr_tbody = tbody trs in
     let head_columns = tr (List.map (fun x -> th [pcdata x]) columns_name) in
     let curr_thead = thead [head_columns] in
     let curr_table = tablex ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody] in
-    div ~a:[a_class ["table-responsive"]] [curr_table]
+    let all_class = "table-responsive" :: add_cl in
+    div ~a:[a_class all_class] [curr_table]
 
   let make_complete_event_table data = make_table ["Name"; "Owner";
                                                    "Location"; "Start_time";

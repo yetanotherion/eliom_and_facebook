@@ -8,18 +8,25 @@ end
 module Lwt_PGOCaml = PGOCaml_generic.Make(Lwt_thread)
 module Lwt_Query = Query.Make_with_Db(Lwt_thread)(Lwt_PGOCaml)
 
-let get_db : unit -> unit Lwt_PGOCaml.t Lwt.t =
+let connect_to_db () =
+  try_lwt
+    Lwt_PGOCaml.connect ~database:"testapp" ()
+  with _ -> Lwt_PGOCaml.connect ~host:"127.0.0.1"
+    ~user:"postgres"
+    ~password:"postgres"
+    ~port:5432
+    ~database:"testapp" ()
+
+let get_db () =
   let db_handler = ref None in
-  fun () ->
-    match !db_handler with
-      | Some h -> Lwt.return h
-      | None -> (try_lwt
-                   Lwt_PGOCaml.connect ~database:"testapp" ()
-                 with _ -> Lwt_PGOCaml.connect ~host:"127.0.0.1"
-                                               ~user:"postgres"
-                                               ~password:"postgres"
-                                               ~port:5432
-                                               ~database:"testapp" ())
+  match !db_handler with
+    | Some h -> Lwt.return h
+    | None -> begin
+      lwt h = connect_to_db () in
+      db_handler:= Some h;
+      Lwt.return h
+      end
+
 let events = <:table< events (
   url text NOT NULL,
   location text NOT NULL,
@@ -42,11 +49,6 @@ let make_event event_db =
         nb_declined = Int32.to_int event_db#!nb_declined;
         nb_invited = Int32.to_int event_db#!nb_invited;
       }
-
-let get_events () =
-  lwt dbh = get_db () in
-  lwt events = Lwt_Query.query dbh <:select< r | r in $events$ >> in
-  Lwt.return (List.map make_event events)
 
 let get_event url =
   lwt dbh = get_db () in
@@ -136,11 +138,19 @@ let rec event_ast_to_view table ast =
                               << row | row in $event_ast_to_view table2 expr2$ >>
     | `Single (sexpr) ->  single_expr_view sexpr table
 
-let get_events_from_query ?limit:(l=10) ?offset:(o=0l) query =
-  let lexbuf = Lexing.from_string query in
-  let ast = Event_query_parser.main Event_query_lexer.token lexbuf in
+let get_events_from_query ?limit:(l=10) ?offset:(o=0l) queryo =
   lwt dbh = get_db () in
-  let event_view = event_ast_to_view << row | row in $events$ >> ast in
-  let limited_view = << row order by row.start_date limit $int32:Int32.of_int l$ offset $int32:o$ | row in $event_view$ >> in
-  lwt events = Lwt_Query.view dbh limited_view in
+  lwt events = match queryo with
+    | Some query -> begin
+      let lexbuf = Lexing.from_string query in
+      let ast = Event_query_parser.main Event_query_lexer.token lexbuf in
+      let event_view = event_ast_to_view << row | row in $events$ >> ast in
+      let limited_view = << row order by row.start_date desc limit $int32:Int32.of_int l$ offset $int32:o$ | row in $event_view$ >> in
+      Lwt_Query.view dbh limited_view
+      end
+   | None -> begin
+      let limited_select = <:select< row order by row.start_date desc limit $int32:Int32.of_int l$ offset $int32:o$ | row in $events$ >> in
+      Lwt_Query.query dbh limited_select
+      end
+  in
   Lwt.return (List.map make_event events)
