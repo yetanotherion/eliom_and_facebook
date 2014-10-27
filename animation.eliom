@@ -48,8 +48,7 @@ let rec compute_x_range ?step:(s=20) sx dx =
   if sx > dx then List.rev (compute_x_range ~step:s dx sx)
   else range ~step:s (to_int sx) (to_int dx)
 
-let compute_between ?coeff:(c=1.0 /. 2.0) xO xD =
-  xO +. (xD -. xO) *. c
+let compute_between ?coeff:(c=1.0 /. 2.0) xO xD = xO +. (xD -. xO) *. c
 
 let line_func_param yO xO yD xD =
   (* y = slope * x + y_src *)
@@ -94,18 +93,22 @@ let compute_one_basketball_traj ?coeff:(coeff=0.1) yO xO yD xD =
   let open ProjectedY in
   if a <= zero then (f, f (project_in_x (div (sub zero b) (mult_float a 2.0))))
   else
+    (* make the curve look good, by computing
+       the symmetry from the line between the two points
+    *)
     let s, _ = line_func_param yO xO yD xD in
     let line_f = line_func yO xO yD xD in
     let f x =
       let yparabol = f x in
       let yline = line_f x in
-      (* yparabol = a * x2 + b * x + c *)
-      (* yline = s * x + r *)
-      (* y = 2 * (s * x + r) - yparabol *)
-      (* y' = 2 * s - 2 * a * x - b *)
-      (* max = (2 * s - b)  / (2 * a) *)
       add yline (sub yline yparabol)
     in
+    (* yparabol = a * x2 + b * x + c *)
+    (* yline = s * x + r *)
+    (* y = 2 * yline - yparabol *)
+    (* y' = 2 * s - 2 * a * x - b *)
+    (* 0 = 2 * s - 2 * a * max - b *)
+    (* max = (2 * s - b)  / (2 * a) *)
     (f, f (project_in_x (div (sub (mult_float s 2.0) b) (mult_float a 2.0))))
 
 let basketball_func yO xO yD xD =
@@ -142,14 +145,11 @@ let do_one_move x move =
     | `PaddingTop d -> Html5.Manip.SetCss.paddingTopPx x d
     | `Skip -> ()
 
-
 let move_done = ref false
 
 let do_move x move =
   Html5.Manip.SetCss.position x "absolute";
   List.iter (fun m -> do_one_move x m) move
-
-
 
 let compute_move ?step:(s=20) sx dx f =
   let range_of_x = compute_x_range ~step:s sx dx in
@@ -165,21 +165,10 @@ let compute_funny_move yO xO yD xD =
   let open ProjectedY in
   let yO = of_float yO in
   let yD = of_float yD in
-  (*let jump1 = compute_jump_move yO xO 50.0 in
-  let jump2 = compute_jump_move yO xO 75.0 in*)
   let xMiddle = compute_between xO xD in
   let yMiddle = div_float (add yD yO) 3.0 in
-  if not !move_done then (
-    let res = Printf.sprintf "src: (%f, %f), dst: (%f, %f)\n" xO (to_float yO) xD (to_float yD) in
-    Firebug.console##log(Js.string res));
-  (*let first_parabol = compute_parabolic_move yO xO yMiddle xMiddle in
-    let snd_parabol = compute_parabolic_move yMiddle xMiddle yD xD in
-    let _ = jump1 @ jump2 @ first_parabol @ jump1 @ jump2 @ snd_parabol in
-    compute_jump_move yO xO 400.0
-    first_parabol @ snd_parabol *)
   let move_1 = compute_basketball_move yO xO yMiddle xMiddle in
   let move_2 = compute_basketball_move yMiddle xMiddle yO xO in
-  let xMiddle = compute_between xO xD in
   let yMiddle = div_float (add yD yO) 1.5 in
   let move_3 = compute_basketball_move yO xO yMiddle xMiddle in
   let move_4 = compute_basketball_move yMiddle xMiddle yD xD in

@@ -18,9 +18,14 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
       | `Invited_ref -> "events_ref_invited.png"
       | `Not_invited_ref -> "events_ref_not_invited.png"
 
-  let make_users_in_div ?usert:(u=`All) ?draggable:(d=true) ?size:(s=16) text =
-    let icon = img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file u))) ~alt:"users" ~a:[a_height s; a_width s;
-                                                                                                          a_draggable d] () in
+  let make_users_in_div ?usert:(u=`All) ?userid:(uid=None) ?draggable:(d=true) ?size:(s=16) text =
+    let attributes = [a_height s; a_width s;
+                      a_draggable d] in
+    let attributes = match uid with
+      | None -> attributes
+      | Some x -> (a_id (Printf.sprintf "%d" x)) :: attributes
+    in
+    let icon = img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file u))) ~alt:"users" ~a:attributes () in
     [icon; pcdata text]
 
   let make_users_basket_in_div number_of_users =
@@ -72,12 +77,17 @@ let create_user_sets () = {
 let find_user user_sets button_id =
   List.find (fun x -> x.user_id = button_id) user_sets.all_users
 
+type move_state = [
+| `NoAnimation
+| `WaitForStart of int
+| `WaitForEnd of (int * Utils.RsvpSet.t)]
+
 type 'a ui_data = {
   events_in_db_container: Utils.event Events_store.t;
   selected_events: (selected_events * Utils.spans) Events_store.t;
   resolved_events_cache: Utils.event_and_users Events_store.t;
   nb_event_per_request: int;
-  all_user_div: Dom_html.element Js.t;
+  all_users_div: Dom_html.element Js.t;
   reference_event_div: Dom_html.element Js.t;
   selected_events_div: Dom_html.element Js.t;
   legend_div: Dom_html.element Js.t;
@@ -87,53 +97,9 @@ type 'a ui_data = {
   mutable curr_query: string option;
   mutable buttons_to_move: 'a Eliom_content.Html5.elt list;
   mutable buttons_move: ('a Eliom_content.Html5.elt * Animation.move list list) option;
+  mutable wait_for_move: move_state;
+  mutable all_users_container: Utils.RsvpSet.t;
 }
-
-let create all_user_div reference_event_div selected_events_div legend_div =
-  let res = { events_in_db_container = Events_store.create 100;
-    selected_events = Events_store.create 100;
-    resolved_events_cache = Events_store.create 100;
-    nb_event_per_request = 5;
-    all_user_div = Html5.To_dom.of_element all_user_div;
-    reference_event_div = Html5.To_dom.of_element reference_event_div;
-    selected_events_div = Html5.To_dom.of_element selected_events_div;
-    legend_div = Html5.To_dom.of_element legend_div;
-    ref_event = `Undefined;
-    user_sets = create_user_sets ();
-    curr_offset = 0l;
-    curr_query = None;
-    buttons_to_move = [];
-    buttons_move = None;
-  } in
-  let () = Random.self_init () in
-  let print_coord label elem =
-    let top, left, right, bottom = Utils.getBoundingClientRectCoordinates elem in
-    Firebug.console##log(Js.string (Printf.sprintf "%s=top: %f, left: %f, right: %f, bottom:%f\n" label top left right bottom));
-  in
-  print_coord "all_user_div" res.all_user_div;
-  let movebuttons () =
-    match res.buttons_move with
-      | None -> begin
-        match res.buttons_to_move with
-          | [] -> ()
-          | hd :: _ ->
-            let top, left, right, bottom = Utils.getBoundingClientRectCoordinates res.all_user_div in
-            let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element hd) in
-            if not !Animation.move_done then (
-              res.buttons_move <- Some (hd, Animation.compute_funny_move curr_top curr_left top left);
-              Animation.move_done := true)
-      end
-      | Some (x, l) -> begin
-        match l with
-          | [] -> res.buttons_move <- None
-          | hd :: tl -> (
-            Animation.do_move x hd;
-            res.buttons_move <- Some (x, tl))
-      end
-  in
-  ignore (Dom_html.window##setInterval(Js.wrap_callback movebuttons,
-                                       0.05 *. 1000.));
-  res
 
 let common_users l1 l2 =
   Utils.RsvpSet.inter (Utils.make_rsvp_set l1) (Utils.make_rsvp_set l2)
@@ -152,7 +118,7 @@ let append_new_user_set user_sets users =
   }, new_user)
 
 let make_user_button t user utype text =
-  let button = make_users_in_div ~usert:utype text in
+  let button = make_users_in_div ~usert:utype ~userid:(Some user.user_id) text in
   let res = div button in
   let () = match button with
     | hd :: _ -> t.buttons_to_move <- hd :: t.buttons_to_move
@@ -215,9 +181,9 @@ let make_selectable_event x =
 
 let display_resolved_event resolved_event spans =
   let open Utils in
-  Utils.display_all_rsvp [(resolved_event.attending, spans.attending_span);
-                          (resolved_event.declined, spans.declined_span);
-                          (resolved_event.invited, spans.invited_span)]
+  display_all_rsvp [(resolved_event.attending, spans.attending_span);
+                    (resolved_event.declined, spans.declined_span);
+                    (resolved_event.invited, spans.invited_span)]
 
 let process_event event spans user_ref =
  try_lwt
@@ -281,7 +247,7 @@ let display_differences t =
    end
  in
  if List.length !resolved_events > 0 && ref_event_resolved then (
-   Utils.show_element t.all_user_div;
+   Utils.show_element t.all_users_div;
    Utils.show_element t.legend_div)
 
 let make_rpc_get_events_args ?offset:(o=0l) t queryo =
@@ -289,8 +255,6 @@ let make_rpc_get_events_args ?offset:(o=0l) t queryo =
 
 let rec get_and_record_events t queryo db_selected_events_span =
    let compute_link next_offset link_type =
-     (* we make an a, pointing to a static service output "",
-        as the browser do not display other elements as a link instead *)
      let link =
        match link_type with
          | `Next -> make_next ()
@@ -427,4 +391,92 @@ let on_user_drop_in_ref_event t ref_event_span ev _ =
   (* compute differences *)
   let () = display_differences t in
   Lwt.return_unit
+
+let add_users_in_button_id t button_id =
+  let corresponding_user = find_user t.user_sets button_id in
+  Utils.RsvpSet.union t.all_users_container corresponding_user.users
+
+let update_all_users_basket t new_users =
+  let new_basket = make_users_basket_in_div (Utils.RsvpSet.cardinal new_users) in
+  Html5.Manip.replaceChildren (Html5.Of_dom.of_element t.all_users_div) new_basket
+
+let update_all_users_basket_from_button_id ?update_all_users:(u=true) t button_id=
+  let new_users = add_users_in_button_id t button_id in
+  let () = if u then t.all_users_container <- new_users in
+  update_all_users_basket t new_users
+
+let stop_animations t = t.wait_for_move <- `NoAnimation
+
+let movebuttons t =
+  fun () -> begin
+    match t.wait_for_move with
+      | `NoAnimation -> ()
+      | `WaitForStart x -> begin
+        if x < 1000 then begin
+          t.wait_for_move <- `WaitForStart (x + 1); ()
+        end
+        else begin
+          match t.buttons_move with
+            | None -> begin
+              match t.buttons_to_move with
+                | [] -> ()
+                | _ -> (
+                  let random_idx = Random.int (List.length t.buttons_to_move) in
+                  let hd = List.nth t.buttons_to_move random_idx in
+                  let top, left, right, bottom = Utils.getBoundingClientRectCoordinates t.all_users_div in
+                  let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element hd) in
+                  t.buttons_move <- Some (hd, Animation.compute_funny_move curr_top curr_left top left))
+            end
+            | Some (x, l) -> begin
+              match l with
+                | [] -> (t.buttons_move <- None;
+                         let button = Html5.To_dom.of_element x in
+                         let id = Js.Opt.get (button##getAttribute (Js.string "id")) (fun () -> assert false) in
+                         let button_id = int_of_string (Js.to_string id) in
+                         let () = update_all_users_basket_from_button_id ~update_all_users:false t button_id in
+                         display_differences t;
+                         t.wait_for_move <- `WaitForEnd (0, t.all_users_container))
+                | hd :: tl -> (
+                  Animation.do_move x hd;
+                  t.buttons_move <- Some (x, tl))
+            end
+        end
+      end
+      | `WaitForEnd (x, u) -> begin
+        if x < 100 then begin
+          t.wait_for_move <- `WaitForEnd (x + 1, u); ()
+        end
+        else (
+          update_all_users_basket t u;
+          t.wait_for_move <- `WaitForStart 0;
+        )
+      end
+  end
+let create all_users_div reference_event_div selected_events_div legend_div =
+  let res = {
+    events_in_db_container = Events_store.create 100;
+    selected_events = Events_store.create 100;
+    resolved_events_cache = Events_store.create 100;
+    nb_event_per_request = 5;
+    all_users_div = Html5.To_dom.of_element all_users_div;
+    reference_event_div = Html5.To_dom.of_element reference_event_div;
+    selected_events_div = Html5.To_dom.of_element selected_events_div;
+    legend_div = Html5.To_dom.of_element legend_div;
+    ref_event = `Undefined;
+    user_sets = create_user_sets ();
+    curr_offset = 0l;
+    curr_query = None;
+    buttons_to_move = [];
+    buttons_move = None;
+    wait_for_move = `WaitForStart 0;
+    all_users_container = Utils.RsvpSet.empty;
+  } in
+  let () = Random.self_init () in
+  let print_coord label elem =
+    let top, left, right, bottom = Utils.getBoundingClientRectCoordinates elem in
+    Firebug.console##log(Js.string (Printf.sprintf "%s=top: %f, left: %f, right: %f, bottom:%f\n" label top left right bottom));
+  in
+  ignore (Dom_html.window##setInterval(Js.wrap_callback (movebuttons res),
+                                       0.05 *. 1000.));
+  res
 }}

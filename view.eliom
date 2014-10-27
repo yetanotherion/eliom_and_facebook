@@ -36,7 +36,6 @@ let view_service unused unused2 =
     let open View_events in
     let open Lwt_js_events in
     let t = create %all_users_div %reference_event_div %selected_events_div %legend_div in
-    let all_users_container = ref Utils.RsvpSet.empty in
     async (fun () ->
       lwt () = Utils.lwt_autologin () in
       View_events.get_and_record_events t None %db_selected_events_span
@@ -51,9 +50,8 @@ let view_service unused unused2 =
       let (data_val: string) = Js.to_string data_val in
       let button_id = int_of_string data_val in
       Firebug.console##log((Printf.sprintf "Got button_id %d" button_id));
-      let corresponding_user = find_user t.user_sets button_id in
-      all_users_container := Utils.RsvpSet.union !all_users_container corresponding_user.users;
-      Html5.Manip.replaceChildren %all_users_div (make_users_basket_in_div (Utils.RsvpSet.cardinal !all_users_container));
+      let () = stop_animations t in
+      let () = update_all_users_basket_from_button_id t button_id in
       Lwt.return_unit
     in
     let ondragover ev _ =
