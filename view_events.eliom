@@ -145,7 +145,7 @@ let check_event_coherence event =
   Firebug.console##log(Printf.sprintf "attending&invited:%d" (cardinal (inter attending invited)));
   Firebug.console##log(Printf.sprintf "declined&invited:%d" (cardinal (inter declined invited)))
 
-let compare_rsvp t event compared_users compared_span =
+let display_compared_rsvp t event compared_users compared_span =
   (*let () = check_event_coherence event in*)
   let compared_users_set = Utils.make_rsvp_set compared_users in
   let user_sets, compared_user = append_new_user_set t.user_sets compared_users_set in
@@ -167,6 +167,13 @@ let compare_rsvp t event compared_users compared_span =
                                                           Printf.sprintf "%d" (Utils.RsvpSet.cardinal not_invited.users))]);
   t.user_sets <- user_sets
 
+let display_rsvp t users span =
+  (*let () = check_event_coherence event in*)
+  let user_sets, displayed_users = append_new_user_set t.user_sets (Utils.make_rsvp_set users) in
+  Html5.Manip.replaceChildren span [make_user_button t displayed_users `All_events
+                                       (Printf.sprintf "%d" (List.length users))];
+  t.user_sets <- user_sets
+
 let make_selectable_event x =
  let res = tr ~a:[a_draggable true] (Utils.print_event x) in
  let res_dom = Html5.To_dom.of_element res in
@@ -179,13 +186,12 @@ let make_selectable_event x =
  Lwt.async (fun () -> dragstarts res_dom ondragstarts);
  res
 
-let display_resolved_event resolved_event spans =
-  let open Utils in
-  display_all_rsvp [(resolved_event.attending, spans.attending_span);
-                    (resolved_event.declined, spans.declined_span);
-                    (resolved_event.invited, spans.invited_span)]
+let display_resolved_event t resolved_event spans =
+  List.iter (fun (u, s) -> display_rsvp t u s) [(resolved_event.Utils.attending, spans.Utils.attending_span);
+                                                (resolved_event.Utils.declined, spans.Utils.declined_span);
+                                                (resolved_event.Utils.invited, spans.Utils.invited_span)]
 
-let process_event event spans user_ref =
+let process_event t event spans user_ref =
  try_lwt
   let event_url = event.Utils.url in
   lwt res = Utils.lwt_api_event event_url in
@@ -199,7 +205,7 @@ let process_event event spans user_ref =
       lwt (attending, declined, invited) = Utils.process_all_rsvp event_url in
       let resolved_event = Utils.make_event_and_users event_url event attending declined invited in
       user_ref := Some resolved_event;
-      display_resolved_event resolved_event spans;
+      display_resolved_event t resolved_event spans;
       Lwt.return_unit
     end
   with x -> begin
@@ -211,7 +217,7 @@ let process_event event spans user_ref =
 let resolve_event t event spans =
  let event_ref = ref None in
  let must x = match x with | None -> assert(false) | Some x -> x in
- lwt () = process_event event spans event_ref in
+ lwt () = process_event t event spans event_ref in
  let () = Events_store.remove t.selected_events event.Utils.url in
  let () = Events_store.remove t.resolved_events_cache event.Utils.url in
  let resolved_event = must !event_ref in
@@ -231,23 +237,24 @@ let display_differences t =
  let ref_event_resolved =
  match t.ref_event with
    | `Undefined | `Resolving (_, _) -> begin
-     List.iter (fun (_, span) ->
-       List.iter (fun s ->
-         Html5.Manip.replaceChildren s [pcdata "the reference is not computed yet"])
-         [span.Utils.attending_span; span.Utils.declined_span; span.Utils.invited_span]) !resolved_events;
+     List.iter (fun (curr_event, span) ->
+       List.iter (fun (u, s) -> display_rsvp t u s)
+           [(curr_event.Utils.attending, span.Utils.attending_span);
+            (curr_event.Utils.declined, span.Utils.declined_span);
+            (curr_event.Utils.invited, span.Utils.invited_span)]) !resolved_events;
      false
    end
    | `Resolved (x, _) -> begin
      List.iter (fun (curr_event, span) ->
-       List.iter (fun (u, s) -> compare_rsvp t x u s)
+       List.iter (fun (u, s) -> display_compared_rsvp t x u s)
          [(curr_event.Utils.attending, span.Utils.attending_span);
           (curr_event.Utils.declined, span.Utils.declined_span);
           (curr_event.Utils.invited, span.Utils.invited_span)]) !resolved_events;
      true
    end
  in
+ Utils.show_element t.all_users_div;
  if List.length !resolved_events > 0 && ref_event_resolved then (
-   Utils.show_element t.all_users_div;
    Utils.show_element t.legend_div)
 
 let make_rpc_get_events_args ?offset:(o=0l) t queryo =
@@ -324,7 +331,7 @@ let on_user_drop_in_selected_events t selected_events_span ev _ =
                    Events_store.add t.selected_events event.Utils.url ((`Resolving event, spans))
         | true -> let resolved_event = Events_store.find t.resolved_events_cache data_val in
                   let () = Events_store.add t.selected_events event.Utils.url ((`Resolved resolved_event, spans)) in
-                  display_resolved_event resolved_event spans
+                  display_resolved_event t resolved_event spans
 
     end
     | true -> () in
@@ -356,7 +363,7 @@ let on_user_drop_in_ref_event t ref_event_span ev _ =
     let resolve_ref_event () =
       let event_ref = ref None in
       let must x = match x with | None -> assert(false) | Some x -> x in
-      lwt () = process_event event spans event_ref in
+      lwt () = process_event t event spans event_ref in
       let resolved_event = must !event_ref in
       let () = t.ref_event <- `Resolved (resolved_event, spans) in
       let () = Events_store.remove t.resolved_events_cache event.Utils.url in
@@ -368,7 +375,7 @@ let on_user_drop_in_ref_event t ref_event_span ev _ =
                  t.ref_event <- `Resolving (event, spans)
       | true -> let resolved_event = Events_store.find t.resolved_events_cache data_val in
                 let () = t.ref_event <- `Resolved (resolved_event, spans) in
-                display_resolved_event resolved_event spans
+                display_resolved_event t resolved_event spans
   in
   let () = match t.ref_event with
     | `Undefined -> create_new_ref_event ()
@@ -412,7 +419,7 @@ let movebuttons t =
     match t.wait_for_move with
       | `NoAnimation -> ()
       | `WaitForStart x -> begin
-        if x < 1000 then begin
+        if x < 100 then begin
           t.wait_for_move <- `WaitForStart (x + 1); ()
         end
         else begin
@@ -420,25 +427,29 @@ let movebuttons t =
             | None -> begin
               match t.buttons_to_move with
                 | [] -> ()
-                | _ -> (
+                | _ -> begin
                   let random_idx = Random.int (List.length t.buttons_to_move) in
                   let hd = List.nth t.buttons_to_move random_idx in
                   let top, left, right, bottom = Utils.getBoundingClientRectCoordinates t.all_users_div in
                   let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element hd) in
-                  t.buttons_move <- Some (hd, Animation.compute_funny_move curr_top curr_left top left))
+                  t.buttons_move <- Some (hd, Animation.compute_funny_move curr_top curr_left top left)
+                end
             end
             | Some (x, l) -> begin
               match l with
-                | [] -> (t.buttons_move <- None;
-                         let button = Html5.To_dom.of_element x in
-                         let id = Js.Opt.get (button##getAttribute (Js.string "id")) (fun () -> assert false) in
-                         let button_id = int_of_string (Js.to_string id) in
-                         let () = update_all_users_basket_from_button_id ~update_all_users:false t button_id in
-                         display_differences t;
-                         t.wait_for_move <- `WaitForEnd (0, t.all_users_container))
-                | hd :: tl -> (
+                | [] -> begin
+                  t.buttons_move <- None;
+                  let button = Html5.To_dom.of_element x in
+                  let id = Js.Opt.get (button##getAttribute (Js.string "id")) (fun () -> assert false) in
+                  let button_id = int_of_string (Js.to_string id) in
+                  let () = update_all_users_basket_from_button_id ~update_all_users:false t button_id in
+                  display_differences t;
+                  t.wait_for_move <- `WaitForEnd (0, t.all_users_container)
+                end
+                | hd :: tl -> begin
                   Animation.do_move x hd;
-                  t.buttons_move <- Some (x, tl))
+                  t.buttons_move <- Some (x, tl)
+                end
             end
         end
       end
@@ -446,10 +457,10 @@ let movebuttons t =
         if x < 100 then begin
           t.wait_for_move <- `WaitForEnd (x + 1, u); ()
         end
-        else (
+        else begin
           update_all_users_basket t u;
           t.wait_for_move <- `WaitForStart 0;
-        )
+        end
       end
   end
 let create all_users_div reference_event_div selected_events_div legend_div =
