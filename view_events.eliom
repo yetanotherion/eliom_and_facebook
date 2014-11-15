@@ -226,7 +226,19 @@ let resolve_event t event spans =
  let () = Events_store.add t.resolved_events_cache event.Utils.url resolved_event in
  Lwt.return_unit
 
-let display_differences t =
+let display_event ?ref_event:(r=None) t event span =
+  let f arg =
+    let u, s = arg in
+    match r with
+    | None -> display_rsvp t u s
+    | Some ref_event -> display_compared_rsvp t ref_event u s
+  in
+  List.iter f [(event.Utils.attending, span.Utils.attending_span);
+               (event.Utils.declined, span.Utils.declined_span);
+               (event.Utils.invited, span.Utils.invited_span)]
+
+
+let refresh_ui t =
  let resolved_events = ref [] in
  let () = Events_store.iter (fun k (event, spans) ->
    match event with
@@ -238,18 +250,13 @@ let display_differences t =
  match t.ref_event with
    | `Undefined | `Resolving (_, _) -> begin
      List.iter (fun (curr_event, span) ->
-       List.iter (fun (u, s) -> display_rsvp t u s)
-           [(curr_event.Utils.attending, span.Utils.attending_span);
-            (curr_event.Utils.declined, span.Utils.declined_span);
-            (curr_event.Utils.invited, span.Utils.invited_span)]) !resolved_events;
+       display_event t curr_event span) !resolved_events;
      false
    end
-   | `Resolved (x, _) -> begin
+   | `Resolved (ref_event, ref_span) -> begin
      List.iter (fun (curr_event, span) ->
-       List.iter (fun (u, s) -> display_compared_rsvp t x u s)
-         [(curr_event.Utils.attending, span.Utils.attending_span);
-          (curr_event.Utils.declined, span.Utils.declined_span);
-          (curr_event.Utils.invited, span.Utils.invited_span)]) !resolved_events;
+       display_event ~ref_event:(Some ref_event) t curr_event span) !resolved_events;
+     display_event t ref_event ref_span;
      true
    end
  in
@@ -348,7 +355,7 @@ let on_user_drop_in_selected_events t selected_events_span ev _ =
     | Some x -> x
   in
   (* compute differences *)
-  let () = display_differences t in
+  let () = refresh_ui t in
   Lwt.return_unit
 
 let on_user_drop_in_ref_event t ref_event_span ev _ =
@@ -396,7 +403,7 @@ let on_user_drop_in_ref_event t ref_event_span ev _ =
   (* wait for the resolution of FB requests *)
   lwt () = match !to_resolve_lwt with | None -> Lwt.return_unit | Some x -> x in
   (* compute differences *)
-  let () = display_differences t in
+  let () = refresh_ui t in
   Lwt.return_unit
 
 let add_users_in_button_id t button_id =
@@ -443,7 +450,7 @@ let movebuttons t =
                   let id = Js.Opt.get (button##getAttribute (Js.string "id")) (fun () -> assert false) in
                   let button_id = int_of_string (Js.to_string id) in
                   let () = update_all_users_basket_from_button_id ~update_all_users:false t button_id in
-                  display_differences t;
+                  refresh_ui t;
                   t.wait_for_move <- `WaitForEnd (0, t.all_users_container)
                 end
                 | hd :: tl -> begin
