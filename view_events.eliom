@@ -89,7 +89,9 @@ type 'a ui_data = {
   nb_event_per_request: int;
   all_users_div: Dom_html.element Js.t;
   reference_event_div: Dom_html.element Js.t;
+  reference_event_img: Dom_html.element Js.t;
   selected_events_div: Dom_html.element Js.t;
+  selected_events_img: Dom_html.element Js.t;
   legend_div: Dom_html.element Js.t;
   mutable ref_event: reference_event;
   mutable user_sets: user_sets;
@@ -323,6 +325,7 @@ let on_db_input_changes t url_input db_selected_events_span ev _ =
 
 let on_user_drop_in_selected_events t selected_events_span ev _ =
   Dom.preventDefault ev;
+  Utils.hidde_element t.selected_events_img;
   let data_val = ev##dataTransfer##getData((Js.string "event_id")) in
   let (data_val: string) = Js.to_string data_val in
     (* create the UI elements for new selected elements
@@ -360,6 +363,7 @@ let on_user_drop_in_selected_events t selected_events_span ev _ =
 
 let on_user_drop_in_ref_event t ref_event_span ev _ =
   Dom.preventDefault ev;
+  Utils.hidde_element t.reference_event_img;
   let data_val = ev##dataTransfer##getData((Js.string "event_id")) in
   let (data_val: string) = Js.to_string data_val in
   let to_resolve_lwt = ref None in
@@ -470,7 +474,10 @@ let movebuttons t =
         end
       end
   end
-let create all_users_div reference_event_div selected_events_div legend_div =
+let create all_users_div
+    reference_event_img reference_event_div
+    selected_events_img selected_events_div
+    legend_div =
   let res = {
     events_in_db_container = Events_store.create 100;
     selected_events = Events_store.create 100;
@@ -478,7 +485,9 @@ let create all_users_div reference_event_div selected_events_div legend_div =
     nb_event_per_request = 5;
     all_users_div = Html5.To_dom.of_element all_users_div;
     reference_event_div = Html5.To_dom.of_element reference_event_div;
+    reference_event_img = Html5.To_dom.of_element reference_event_img;
     selected_events_div = Html5.To_dom.of_element selected_events_div;
+    selected_events_img = Html5.To_dom.of_element selected_events_img;
     legend_div = Html5.To_dom.of_element legend_div;
     ref_event = `Undefined;
     user_sets = create_user_sets ();

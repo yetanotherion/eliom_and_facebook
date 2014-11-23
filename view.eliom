@@ -7,11 +7,12 @@ open Eliom_parameter
 
 let view_service unused unused2 =
   let db_selected_events_span = span [] in
-
   let selected_events_span = span [] in
-  let selected_events_div = div ~a:[a_class ["container"]] [pcdata "put your selected events here"; selected_events_span] in
+  let selected_events_img = img ~src:(uri_of_string (fun () -> "imgs/add_additional_events.png")) ~alt:"put your selected events here" () in
+  let selected_events_div = div ~a:[a_class ["container"]] [selected_events_img; selected_events_span] in
   let reference_event_span = span [] in
-  let reference_event_div = div ~a:[a_class ["container"]] [pcdata "put your reference event here"; reference_event_span] in
+  let reference_event_img = img ~src:(uri_of_string (fun () -> "imgs/set_reference_event.png")) ~alt:"put your reference event here" () in
+  let reference_event_div = div ~a:[a_class ["container"]] [reference_event_img; reference_event_span] in
 
   let all_users_div = div ~a:[a_class ["hidden"]] (View_events.make_users_basket_in_div 0) in
   let legend_info = [(`All_events,
@@ -35,7 +36,7 @@ let view_service unused unused2 =
   let _ = {unit{
     let open View_events in
     let open Lwt_js_events in
-    let t = create %all_users_div %reference_event_div %selected_events_div %legend_div in
+    let t = create %all_users_div %reference_event_img %reference_event_div %selected_events_img %selected_events_div %legend_div in
     async (fun () ->
       lwt () = Utils.lwt_autologin () in
       View_events.get_and_record_events t None %db_selected_events_span
