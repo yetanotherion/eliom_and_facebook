@@ -60,16 +60,9 @@ let bootstrap_metas = [utf8_meta;
 
   let getOffsetRect element =
     let box = getBoundingClientRect element in
-    let body = Dom_html.document##body in
-    let window = Dom_html.window in
-    let docElement = Dom_html.document##documentElement in
     (* we don't support IE < 9
        http://javascript.info/tutorial/coordinates
     *)
-    (*let scrollTop = Js.parseInt window##pageYOffset in
-    let scrollLeft = Js.parseInt window##pageXOffset in
-    let clientTop = Js.parseInt docElement##clientTop in
-    let clientLeft = Js.parseInt docElement##clientLeft in *)
     let top = (Js.parseInt box##top) (*+ scrollTop - clientTop *) in
     let left = (Js.parseInt box##left) (* + scrollLeft - clientLeft*) in
     let right = (Js.parseInt box##right) in
