@@ -51,6 +51,8 @@ let bootstrap_metas = [utf8_meta;
                                  a_content "IE=edge"] ()]
 
 {client{
+  let get_element_id element =
+    Js.to_string (Js.Opt.get (element##getAttribute (Js.string "id")) (fun () -> assert false))
 
   let getBoundingClientRect element = element##getBoundingClientRect()
 
@@ -291,6 +293,9 @@ let bootstrap_metas = [utf8_meta;
      td [pcdata event.owner];
      td [pcdata event.location];
      td [pcdata (epoch_to_light_date event.start_date)]]
+
+  let log s = Firebug.console##log(Js.string s)
+
 }}
 
 let icon_png_link size = uri_of_string (fun () -> Printf.sprintf "ico/apple-touch-icon-%d-precomposed.png" size)

@@ -105,7 +105,7 @@ let check_event_coherence event =
   Firebug.console##log(Printf.sprintf "declined&invited:%d" (cardinal (inter declined invited)))
 
 let make_selectable_event x =
- let res = tr ~a:[a_draggable true] (Utils.print_event x) in
+ let res = tr ~a:[a_draggable true; a_id x.Utils.url] (Utils.print_event x) in
  let res_dom = Html5.To_dom.of_element res in
  let open Lwt_js_events in
  let ondragstarts ev _ =
@@ -183,7 +183,6 @@ let make_user_button t user utype text =
   let ondragstarts ev _ =
     let user_id = Printf.sprintf "%d" user.user_id in
     ev##dataTransfer##setData((Js.string "button_id"), (Js.string user_id));
-    Firebug.console##log("set user_id:" ^ user_id);
     Lwt.return_unit
   in
   Lwt.async (fun () -> dragstarts res_dom ondragstarts);
@@ -352,23 +351,27 @@ let on_db_input_changes t ev _ =
   t.curr_offset <- 0l;
   get_and_record_events t queryo
 
-let on_user_drop_in_selected_events t ev _ =
-  Dom.preventDefault ev;
+let get_event_data ev data_name =
+  let data_val = ev##dataTransfer##getData((Js.string data_name)) in
+  Js.to_string data_val
+
+let get_event_id ev = get_event_data ev "event_id"
+let get_button_id ev = get_event_data ev "button_id"
+
+let drop_event_id_in_selected_events t event_id =
+  (* create the UI elements for new selected elements
+     and launch the associated FB requests to compute attending, etc *)
   Utils.hidde_element t.selected_events_img;
-  let data_val = ev##dataTransfer##getData((Js.string "event_id")) in
-  let (data_val: string) = Js.to_string data_val in
-    (* create the UI elements for new selected elements
-       and launch the associated FB requests to compute attending, etc *)
   let to_resolve_lwt = ref None in
-  let () = match Events_store.mem t.selected_events data_val with
+  let () = match Events_store.mem t.selected_events event_id with
     | false -> begin
-      let event = Events_store.find t.events_in_db_container data_val in
+      let event = Events_store.find t.events_in_db_container event_id in
       let spans = Utils.create_spans () in
       let () = Utils.replace_event_spans event spans in
-      match Events_store.mem t.resolved_events_cache data_val with
+      match Events_store.mem t.resolved_events_cache event_id with
         | false -> let () = to_resolve_lwt:= Some (resolve_event t event spans) in
                    Events_store.add t.selected_events event.Utils.url ((`Resolving event, spans))
-        | true -> let resolved_event = Events_store.find t.resolved_events_cache data_val in
+        | true -> let resolved_event = Events_store.find t.resolved_events_cache event_id in
                   let () = Events_store.add t.selected_events event.Utils.url ((`Resolved resolved_event, spans)) in
                   display_resolved_event t resolved_event spans
 
@@ -390,14 +393,17 @@ let on_user_drop_in_selected_events t ev _ =
   let () = refresh_ui t in
   Lwt.return_unit
 
+let on_user_drop_in_selected_events t ev _ =
+  Dom.preventDefault ev;
+  drop_event_id_in_selected_events t (get_event_id ev)
+
 let on_user_drop_in_ref_event t ev _ =
   Dom.preventDefault ev;
   Utils.hidde_element t.reference_event_img;
-  let data_val = ev##dataTransfer##getData((Js.string "event_id")) in
-  let (data_val: string) = Js.to_string data_val in
+  let event_id = get_event_id ev in
   let to_resolve_lwt = ref None in
   let create_new_ref_event () =
-    let event = Events_store.find t.events_in_db_container data_val in
+    let event = Events_store.find t.events_in_db_container event_id in
     let spans = Utils.create_spans () in
     let () = Utils.replace_event_spans event spans in
     let resolve_ref_event () =
@@ -410,20 +416,20 @@ let on_user_drop_in_ref_event t ev _ =
       let () = Events_store.add t.resolved_events_cache event.Utils.url resolved_event in
       Lwt.return_unit
     in
-    match Events_store.mem t.resolved_events_cache data_val with
+    match Events_store.mem t.resolved_events_cache event_id with
       | false -> let () = to_resolve_lwt := Some (resolve_ref_event ()) in
                  t.ref_event <- `Resolving (event, spans)
-      | true -> let resolved_event = Events_store.find t.resolved_events_cache data_val in
+      | true -> let resolved_event = Events_store.find t.resolved_events_cache event_id in
                 let () = t.ref_event <- `Resolved (resolved_event, spans) in
                 display_resolved_event t resolved_event spans
   in
   let () = match t.ref_event with
     | `Undefined -> create_new_ref_event ()
     | `Resolving (y, _) ->
-      if y.Utils.url = data_val then ()
+      if y.Utils.url = event_id then ()
       else create_new_ref_event ()
     | `Resolved (y, _) ->
-      if y.Utils.ev_url = data_val then ()
+      if y.Utils.ev_url = event_id then ()
       else create_new_ref_event ()
   in
   (* display the UI with, maybe, temporarily non available data *)
@@ -454,9 +460,7 @@ let update_all_users_basket_from_button_id ?update_all_users:(u=true) t button_i
 
 let on_all_users_div_drop t ev _ =
   Dom.preventDefault ev;
-  let data_val = ev##dataTransfer##getData((Js.string "button_id")) in
-  let (data_val: string) = Js.to_string data_val in
-  let button_id = int_of_string data_val in
+  let button_id = int_of_string (get_button_id ev) in
   let () = update_all_users_basket_from_button_id t button_id in
   Lwt.return_unit
 

@@ -76,6 +76,7 @@ let parabolic_func_param ?coeff:(c=0.1) yO xO yD xD =
   (* -c *. 2 *. a = b *)
   (* a *. (xO *. xO - xD *. xD) - maxX *. 2 *. a * (xO -. xD) = yO - yD *)
   (* a = (yO -. yD) / ((xO *. xO - xD *. xD) -maxX *. 2 *. (xO -. xD) *)
+
   let open ProjectedY in
   let a = div_float (sub yO yD) ((xO *. xO -. xD *. xD) -. maxX *. 2.0 *. (xO -. xD)) in
   let b = float_sub 0.0 (mult_float a (2.0 *.maxX)) in
@@ -160,6 +161,11 @@ let compute_move ?step:(s=20) sx dx f =
 
 let compute_basketball_move yO xO yD xD =
   compute_move xO xD (basketball_func yO xO yD xD)
+
+let compute_line_move yO xO yD xD =
+  let open ProjectedY in
+  let yO, yD = of_float yO, of_float yD in
+  compute_move xO xD (line_func yO xO yD xD)
 
 let compute_funny_move yO xO yD xD =
   let open ProjectedY in
