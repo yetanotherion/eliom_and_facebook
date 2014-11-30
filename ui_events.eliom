@@ -379,8 +379,8 @@ let drop_event_id_in_selected_events t event_id =
     | true -> () in
     (* display the UI with temporarily non available data *)
   let trs = ref [] in
-  let () = Events_store.iter (fun _ (_, s) ->
-    trs:= tr (Utils.integrate_spans_in_td s) :: !trs)
+  let () = Events_store.iter (fun url (_, s) ->
+    trs:= tr ~a:[a_id url] (Utils.integrate_spans_in_td s) :: !trs)
     t.selected_events in
   let table = Utils.make_complete_event_table !trs in
   Html5.Manip.replaceChildren t.selected_events_span [table];
@@ -397,10 +397,8 @@ let on_user_drop_in_selected_events t ev _ =
   Dom.preventDefault ev;
   drop_event_id_in_selected_events t (get_event_id ev)
 
-let on_user_drop_in_ref_event t ev _ =
-  Dom.preventDefault ev;
+let drop_event_id_in_reference_event t event_id =
   Utils.hidde_element t.reference_event_img;
-  let event_id = get_event_id ev in
   let to_resolve_lwt = ref None in
   let create_new_ref_event () =
     let event = Events_store.find t.events_in_db_container event_id in
@@ -433,10 +431,12 @@ let on_user_drop_in_ref_event t ev _ =
       else create_new_ref_event ()
   in
   (* display the UI with, maybe, temporarily non available data *)
-  let trs = match t.ref_event with
+  let id, span = match t.ref_event with
     | `Undefined -> assert(false)
-    | `Resolved (_, s) | `Resolving (_, s) -> [tr (Utils.integrate_spans_in_td s)]
+    | `Resolved (r, s) -> (r.Utils.ev_url, s)
+    | `Resolving (r, s) -> (r.Utils.url, s)
   in
+  let trs = [tr ~a:[a_id id] (Utils.integrate_spans_in_td span)] in
   let table = Utils.make_complete_event_table trs in
   Html5.Manip.replaceChildren t.reference_event_span [table];
   (* wait for the resolution of FB requests *)
@@ -444,6 +444,10 @@ let on_user_drop_in_ref_event t ev _ =
   (* compute differences *)
   let () = refresh_ui t in
   Lwt.return_unit
+
+let on_user_drop_in_ref_event t ev _ =
+  Dom.preventDefault ev;
+  drop_event_id_in_reference_event t (get_event_id ev)
 
 let add_users_in_button_id t button_id =
   let corresponding_user = find_user t.user_sets button_id in

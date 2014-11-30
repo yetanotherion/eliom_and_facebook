@@ -21,6 +21,8 @@ module type MakeMoveType = sig
   val handle_move_end: 'a dom_type Ui_events.ui_events -> additional_args -> 'a dom_type Eliom_content.Html5.elt -> unit
   val handle_wait_end: 'a dom_type Ui_events.ui_events -> additional_args -> unit
   val finished: 'a dom_type Ui_events.ui_events -> additional_args -> bool
+  val start_wait: int
+  val end_wait : int
 end
 
 module MakeMove (M:MakeMoveType) = struct
@@ -33,7 +35,7 @@ module MakeMove (M:MakeMoveType) = struct
     match t.state with
       | `NoAnimation -> t.state <- `WaitForStart 0
       | `WaitForStart x -> begin
-        if x < 100 then t.state <- `WaitForStart (x + 1)
+        if x < M.start_wait then t.state <- `WaitForStart (x + 1)
         else
           match M.compute_move ui_t t.additional_args with
             | None -> ()
@@ -52,7 +54,7 @@ module MakeMove (M:MakeMoveType) = struct
           end
       end
       | `WaitForEnd x ->
-        if x < 100 then t.state <- `WaitForEnd (x + 1)
+        if x < M.end_wait then t.state <- `WaitForEnd (x + 1)
         else begin
           M.handle_wait_end ui_t t.additional_args;
           t.state <- `WaitForMoveEnd
@@ -65,7 +67,11 @@ module MakeMove (M:MakeMoveType) = struct
     match t.state with `End -> true | _ -> false
 
 end
-module ButtonsMove = struct
+
+module ButtonsMove =
+struct
+  let start_wait = 0
+  let end_wait = 100
   type additional_args = unit
   let create_additional_args () = ()
   let compute_move t () =
@@ -92,9 +98,19 @@ module ButtonsMove = struct
     update_all_users_basket t t.all_users_container
   let finished t () = true
 end
-module MB = MakeMove(ButtonsMove)
 
-module EventsToAdditionalEvents = struct
+module type WaitParam = sig
+  val start_wait: int
+  val end_wait: int
+end
+
+module type SelectEventInDb = sig
+  val get_destination_element: 'a dom_type Ui_events.ui_events -> Dom_html.element Js.t
+  val drop_in_destination_element: 'a dom_type Ui_events.ui_events -> string -> unit Lwt.t
+end
+
+module EventsToAdditionalEvents (S:SelectEventInDb) (M: WaitParam) = struct
+  include M
   type additional_args = {
     mutable wait_for_fb_request_completion: unit Lwt.t option;
     mutable set_children_back: (unit -> unit) option;
@@ -108,22 +124,40 @@ module EventsToAdditionalEvents = struct
     | None -> assert(false)
     | Some x -> x
 
+  let get_tbody_trs span =
+    let span = Html5.To_dom.of_element span in
+    let selected_events_children = Dom.list_of_nodeList (span##getElementsByTagName (Js.string "tbody")) in
+    match selected_events_children with
+      | [] -> None
+      | tbody_element :: _ -> Some (tbody_element, List.map dom_node_to_element (Dom.list_of_nodeList tbody_element##childNodes))
+
+  let get_trs span =
+    match get_tbody_trs span with
+      | None -> []
+      | Some (_, trs) -> trs
+
+  let select_event t trs =
+    let in_selected = get_trs t.Ui_events.selected_events_span in
+    let in_reference = get_trs t.Ui_events.reference_event_span in
+    let already_selected_events = List.map Utils.get_element_id (in_selected @ in_reference) in
+    let available = List.filter (fun x ->
+      let x_id = Utils.get_element_id x in
+      not (List.exists (fun y -> y = x_id) already_selected_events)) trs in
+    let random_idx = Random.int (List.length available) in
+    List.nth available random_idx
+
   let compute_move t additional_args =
     (* ensure list is not empty *)
     let open Ui_events in
-    let db_span_in_dom = Html5.To_dom.of_element t.db_selected_events_span in
-    let selected_events_children = Dom.list_of_nodeList (db_span_in_dom##getElementsByTagName (Js.string "tbody")) in
-    match selected_events_children with
-      | [] -> None
-      | tbody_element :: _ -> begin
-        let trs = List.map dom_node_to_element (Dom.list_of_nodeList tbody_element##childNodes) in
+    match (get_tbody_trs t.db_selected_events_span) with
+      | None -> None
+      | Some (tbody_element, trs) -> begin
         match trs with
           | [] -> None
-          | _ -> begin
-            let top, left, right, bottom = Utils.getBoundingClientRectCoordinates t.selected_events_img in
-            let random_idx = Random.int (List.length trs) in
-            let nth = List.nth trs random_idx in
-            let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates nth in
+          | trs -> begin
+            let top, left, right, bottom = Utils.getBoundingClientRectCoordinates (S.get_destination_element t) in
+            let event = select_event t trs in
+            let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates event in
             let set_back () =
               let event_urls = List.map Utils.get_element_id trs in
               let events = List.map
@@ -135,7 +169,7 @@ module EventsToAdditionalEvents = struct
               Html5.Manip.replaceChildren (Html5.Of_dom.of_element tbody) new_trs
             in
             additional_args.set_children_back <- Some set_back;
-            Some (Html5.Of_dom.of_element nth,
+            Some (Html5.Of_dom.of_element event,
                   Animation.compute_line_move curr_top curr_left top left)
           end
       end
@@ -148,7 +182,7 @@ module EventsToAdditionalEvents = struct
       | Some x -> x ()
     in
     additional_args.set_children_back <- None;
-    additional_args.wait_for_fb_request_completion <- Some (Ui_events.drop_event_id_in_selected_events t event_id)
+    additional_args.wait_for_fb_request_completion <- Some (S.drop_in_destination_element t event_id)
 
   let handle_wait_end t _ = ()
   let finished t additional_args =
@@ -164,11 +198,27 @@ module EventsToAdditionalEvents = struct
       end
 end
 
-module EAE = MakeMove(EventsToAdditionalEvents)
+module SelectAdditionalEvents = struct
+  let get_destination_element t = t.Ui_events.selected_events_img
+  let drop_in_destination_element t event_id = Ui_events.drop_event_id_in_selected_events t event_id
+end
+
+module SelectReferenceEvent = struct
+  let get_destination_element t = t.Ui_events.reference_event_img
+  let drop_in_destination_element t event_id = Ui_events.drop_event_id_in_reference_event t event_id
+end
+
+module MB = MakeMove (ButtonsMove)
+module EAE = MakeMove(EventsToAdditionalEvents(SelectAdditionalEvents) (struct let start_wait = 100 let end_wait = 0 end))
+module ERE = MakeMove(EventsToAdditionalEvents(SelectReferenceEvent) (struct let start_wait = 0 let end_wait = 0 end))
 
 type 'a demo_move = [
 | `SelectedEventMove of 'a EAE.t
 | `ButtonMove of 'a MB.t
+| `SelectedEventMoveToAdditionalEvent of 'a ERE.t
+| `ButtonMoveInAdditionalEvent of 'a MB.t
+| `LastSelectedEventMove of 'a EAE.t
+| `LastButtonMove of 'a MB.t
 | `Done
 ]
 
@@ -179,14 +229,30 @@ type 'a ui_with_demo = {
 
 let play_demo t = fun () ->
   match t.demo with
-    | `SelectedEventMove et -> begin
-      EAE.next_move et t.ui_events;
-      if EAE.is_demo_finished et then t.demo <- `ButtonMove (MB.create ())
+    | `SelectedEventMove arg -> begin
+      EAE.next_move arg t.ui_events;
+      if EAE.is_demo_finished arg then t.demo <- `ButtonMove (MB.create ())
     end
-    | `ButtonMove dt -> begin
-       MB.next_move dt t.ui_events;
-       if MB.is_demo_finished dt then t.demo <- `Done
-       end
+    | `ButtonMove arg -> begin
+      MB.next_move arg t.ui_events;
+      if MB.is_demo_finished arg then t.demo <- `SelectedEventMoveToAdditionalEvent (ERE.create ())
+    end
+    | `SelectedEventMoveToAdditionalEvent arg -> begin
+      ERE.next_move arg t.ui_events;
+      if ERE.is_demo_finished arg then t.demo <- `ButtonMoveInAdditionalEvent (MB.create ())
+    end
+    | `ButtonMoveInAdditionalEvent arg -> begin
+      MB.next_move arg t.ui_events;
+      if MB.is_demo_finished arg then t.demo <- `LastSelectedEventMove (EAE.create ())
+    end
+    | `LastSelectedEventMove arg -> begin
+      EAE.next_move arg t.ui_events;
+      if EAE.is_demo_finished arg then t.demo <- `LastButtonMove (MB.create ())
+    end
+    | `LastButtonMove arg -> begin
+      MB.next_move arg t.ui_events;
+      if MB.is_demo_finished arg then t.demo <- `Done
+    end
     | `Done -> ()
 
 let stop_demo t = t.demo <- `Done
