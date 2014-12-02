@@ -97,7 +97,7 @@ struct
     let open Ui_events in
     let button = Html5.To_dom.of_element x in
     let button_id = int_of_string (Utils.get_element_id button) in
-    update_all_users_basket_from_button_id ~update_all_users:false t button_id
+    update_all_users_basket_from_button_id t button_id
 
   let handle_wait_end t () = ()
   let finished t () = true
@@ -248,7 +248,7 @@ let play_demo t = fun () ->
     | `SelectedEventMoveToReferenceEvent arg -> begin
       ERE.next_move arg t.ui_events;
       if ERE.is_demo_finished arg then t.demo <- `ButtonMoveInReferenceEvent (MB.create
-                                                                                "You can choose another group of users too"
+                                                                                "You can choose another group of users too (if a user is already there it won't be appended twice)"
                                                                                 "triangle-obtuse")
     end
     | `ButtonMoveInReferenceEvent arg -> begin
@@ -260,7 +260,7 @@ let play_demo t = fun () ->
     | `LastSelectedEventMove arg -> begin
       EAE.next_move arg t.ui_events;
       if EAE.is_demo_finished arg then t.demo <- `LastButtonMove (MB.create
-                                                                    "And pick another set of users"
+                                                                    "And pick another set of users (here again, if a user is already there we won't be appended twice"
                                                                     "triangle-obtuse-other")
     end
     | `LastButtonMove arg -> begin

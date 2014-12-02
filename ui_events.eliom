@@ -459,9 +459,9 @@ let update_all_users_basket t new_users =
   let new_basket = make_users_basket_in_div (Utils.RsvpSet.cardinal new_users) in
   Html5.Manip.replaceChildren (Html5.Of_dom.of_element t.all_users_div) new_basket
 
-let update_all_users_basket_from_button_id ?update_all_users:(u=true) t button_id=
+let update_all_users_basket_from_button_id t button_id=
   let new_users = add_users_in_button_id t button_id in
-  let () = if u then t.all_users_container <- new_users in
+  let () = t.all_users_container <- new_users in
   update_all_users_basket t new_users
 
 let on_all_users_div_drop t ev _ =
