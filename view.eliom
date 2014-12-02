@@ -11,6 +11,7 @@ let view_service unused unused2 =
   let selected_events_img = img ~src:(uri_of_string (fun () -> "imgs/add_additional_events.png")) ~alt:"put your selected events here" () in
   let selected_events_div = div ~a:[a_class ["container"]] [selected_events_img; selected_events_span] in
   let reference_event_span = span [] in
+  let demo_text_span = span [] in
   let reference_event_img = img ~src:(uri_of_string (fun () -> "imgs/set_reference_event.png")) ~alt:"put your reference event here" () in
   let reference_event_div = div ~a:[a_class ["container"]] [reference_event_img; reference_event_span] in
 
@@ -31,7 +32,6 @@ let view_service unused unused2 =
                                                         reference_event_div;
                                                         selected_events_div;
                                                         legend_div] in
-
   let url_input = string_input ~input_type:`Text () in
   let _ = {unit{
     let t = View_events.create
@@ -40,11 +40,12 @@ let view_service unused unused2 =
                         %all_users_div
                         %reference_event_span %reference_event_img %reference_event_div
                         %selected_events_span %selected_events_img %selected_events_div
-                        %legend_div in
+                        %legend_div %demo_text_span in
     View_events.setup t
   }}
   in
   let all_body = [Utils.fb_root_div;
+                  demo_text_span;
                   div ~a:[a_class ["container-fluid"]]
                     [div ~a:[a_class ["row-fluid"]]
                         [div ~a:[a_class ["span3"]]
@@ -60,7 +61,8 @@ let view_service unused unused2 =
                       ["css"; "mb.css"];
                       ["css"; "mb-view.css"];
                       ["css"; "bootstrap-responsive.css"];
-                      ["css"; "signin.css"]]
+                      ["css"; "signin.css"];
+                      ["css"; "bubbles.css"]]
                 ~js:[["js"; "jquery.min.js"];
                      ["js"; "bootstrap.min.js"]]
                 (body b)

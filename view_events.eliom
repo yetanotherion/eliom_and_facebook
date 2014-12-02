@@ -27,9 +27,14 @@ end
 
 module MakeMove (M:MakeMoveType) = struct
   type 'a t = { mutable state: 'a move_state;
-                additional_args: M.additional_args;}
-  let create () = { state = `NoAnimation;
-                    additional_args = M.create_additional_args ()}
+                additional_args: M.additional_args;
+                text: string;
+                style: string;
+              }
+  let create text style = { state = `NoAnimation;
+                            additional_args = M.create_additional_args ();
+                            text = text;
+                            style = style }
   let next_move t ui_t =
     let open Ui_events in
     match t.state with
@@ -37,6 +42,7 @@ module MakeMove (M:MakeMoveType) = struct
       | `WaitForStart x -> begin
         if x < M.start_wait then t.state <- `WaitForStart (x + 1)
         else
+          let () = Ui_events.set_demo_text ui_t (Some (t.text, t.style)) in
           match M.compute_move ui_t t.additional_args with
             | None -> ()
             | Some m -> t.state <- `DuringMove m
@@ -93,9 +99,7 @@ struct
     let button_id = int_of_string (Utils.get_element_id button) in
     update_all_users_basket_from_button_id ~update_all_users:false t button_id
 
-  let handle_wait_end t () =
-    let open Ui_events in
-    update_all_users_basket t t.all_users_container
+  let handle_wait_end t () = ()
   let finished t () = true
 end
 
@@ -210,13 +214,13 @@ end
 
 module MB = MakeMove (ButtonsMove)
 module EAE = MakeMove(EventsToAdditionalEvents(SelectAdditionalEvents) (struct let start_wait = 100 let end_wait = 0 end))
-module ERE = MakeMove(EventsToAdditionalEvents(SelectReferenceEvent) (struct let start_wait = 0 let end_wait = 0 end))
+module ERE = MakeMove(EventsToAdditionalEvents(SelectReferenceEvent) (struct let start_wait = 30 let end_wait = 0 end))
 
 type 'a demo_move = [
 | `SelectedEventMove of 'a EAE.t
 | `ButtonMove of 'a MB.t
-| `SelectedEventMoveToAdditionalEvent of 'a ERE.t
-| `ButtonMoveInAdditionalEvent of 'a MB.t
+| `SelectedEventMoveToReferenceEvent of 'a ERE.t
+| `ButtonMoveInReferenceEvent of 'a MB.t
 | `LastSelectedEventMove of 'a EAE.t
 | `LastButtonMove of 'a MB.t
 | `Done
@@ -231,23 +235,33 @@ let play_demo t = fun () ->
   match t.demo with
     | `SelectedEventMove arg -> begin
       EAE.next_move arg t.ui_events;
-      if EAE.is_demo_finished arg then t.demo <- `ButtonMove (MB.create ())
+
+      if EAE.is_demo_finished arg then t.demo <- `ButtonMove (MB.create "You can select a group of users and drop it in the set of all users"
+                                                                "triangle-obtuse")
     end
     | `ButtonMove arg -> begin
       MB.next_move arg t.ui_events;
-      if MB.is_demo_finished arg then t.demo <- `SelectedEventMoveToAdditionalEvent (ERE.create ())
+      if MB.is_demo_finished arg then t.demo <- `SelectedEventMoveToReferenceEvent (ERE.create
+                                                                                      "To compare users relative to different events, you can set a reference event"
+                                                                                      "triangle-obtuse-other")
     end
-    | `SelectedEventMoveToAdditionalEvent arg -> begin
+    | `SelectedEventMoveToReferenceEvent arg -> begin
       ERE.next_move arg t.ui_events;
-      if ERE.is_demo_finished arg then t.demo <- `ButtonMoveInAdditionalEvent (MB.create ())
+      if ERE.is_demo_finished arg then t.demo <- `ButtonMoveInReferenceEvent (MB.create
+                                                                                "You can choose another group of users too"
+                                                                                "triangle-obtuse")
     end
-    | `ButtonMoveInAdditionalEvent arg -> begin
+    | `ButtonMoveInReferenceEvent arg -> begin
       MB.next_move arg t.ui_events;
-      if MB.is_demo_finished arg then t.demo <- `LastSelectedEventMove (EAE.create ())
+      if MB.is_demo_finished arg then t.demo <- `LastSelectedEventMove (EAE.create
+                                                                          "You can add other events to the list of compared ones"
+                                                                          "triangle-obtuse-other")
     end
     | `LastSelectedEventMove arg -> begin
       EAE.next_move arg t.ui_events;
-      if EAE.is_demo_finished arg then t.demo <- `LastButtonMove (MB.create ())
+      if EAE.is_demo_finished arg then t.demo <- `LastButtonMove (MB.create
+                                                                    "And pick another set of users"
+                                                                    "triangle-obtuse-other")
     end
     | `LastButtonMove arg -> begin
       MB.next_move arg t.ui_events;
@@ -263,19 +277,19 @@ let create
     all_users_div
     reference_event_span reference_event_img reference_event_div
     selected_events_span selected_events_img selected_events_div
-    legend_div =
+    legend_div demo_span =
   let ui_events = Ui_events.create
     url_input
     db_selected_events_span
     all_users_div
     reference_event_span reference_event_img reference_event_div
     selected_events_span selected_events_img selected_events_div
-    legend_div in
+    legend_div demo_span in
   let () = Random.self_init () in
   let ui_with_demo =
     {
       ui_events = ui_events;
-      demo = `SelectedEventMove (EAE.create ())
+      demo = `SelectedEventMove (EAE.create "You can first choose an event" "triangle-obtuse-other")
     }
   in
   ignore (Dom_html.window##setInterval(Js.wrap_callback (play_demo ui_with_demo),

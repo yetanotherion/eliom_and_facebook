@@ -138,6 +138,7 @@ type 'a ui_events = {
   mutable buttons_to_move: 'a Eliom_content.Html5.elt list;
   mutable buttons_move: ('a Eliom_content.Html5.elt * Animation.move list list) option;
   mutable all_users_container: Utils.RsvpSet.t;
+  demo_text_span: 'a Eliom_content.Html5.elt;
 }
 
 let create
@@ -146,7 +147,7 @@ let create
     all_users_div
     reference_event_span reference_event_img reference_event_div
     selected_events_span selected_events_img selected_events_div
-    legend_div =
+    legend_div demo_text_span =
   {
     events_in_db_container = Events_store.create 100;
     selected_events = Events_store.create 100;
@@ -169,6 +170,7 @@ let create
     buttons_to_move = [];
     buttons_move = None;
     all_users_container = Utils.RsvpSet.empty;
+    demo_text_span = demo_text_span;
   }
 
 let make_user_button t user utype text =
@@ -468,4 +470,10 @@ let on_all_users_div_drop t ev _ =
   let () = update_all_users_basket_from_button_id t button_id in
   Lwt.return_unit
 
+let set_demo_text t texto =
+  let to_set = match texto with
+    | None -> []
+    | Some (text, class_name) -> [div ~a:[a_class [class_name]] [pcdata text]]
+  in
+  Html5.Manip.replaceChildren t.demo_text_span to_set
 }}
