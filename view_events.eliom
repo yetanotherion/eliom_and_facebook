@@ -74,6 +74,85 @@ module MakeMove (M:MakeMoveType) = struct
 
 end
 
+module MakeEventLanguageDemo = struct
+  let wait_to_type = 1
+
+  type write_string_and_wait = {
+    mutable wait_for_typping: int;
+    mutable string_to_be_typed: string option;
+  }
+
+  type state = [
+    | `Init
+    | `WriteString of write_string_and_wait
+    | `DoDbQuery of unit Lwt.t
+    | `Done ]
+
+  type t = {
+    mutable state: state;
+    style: string;
+  }
+  let create_ws string = {
+    wait_for_typping = wait_to_type;
+    string_to_be_typed = Some string;
+  }
+  let create style =
+    { state = `Init;
+      style = style; }
+
+  let write_string ui ws =
+    if (ws.wait_for_typping > 0) then begin
+      ws.wait_for_typping <- ws.wait_for_typping - 1;
+      false
+    end
+    else begin
+      match ws.string_to_be_typed with
+        | None -> true
+        | Some s -> begin
+          let older_value = ui.Ui_events.url_input##value in
+          let next_char = s.[0] in
+          ui.Ui_events.url_input##value <- Js.string ((Js.to_string older_value) ^ (String.make 1 next_char));
+          let s_len = String.length s in
+          let () = if s_len > 1 then begin
+            let remaining = String.sub s 1 (s_len - 1) in
+            ws.string_to_be_typed <- Some remaining;
+            ws.wait_for_typping <- wait_to_type
+          end
+            else begin
+              ws.string_to_be_typed <- None
+            end
+          in
+          false
+        end
+    end
+
+  let next_move t ui_t =
+    match t.state with
+      | `Init -> begin
+        let () = Ui_events.set_demo_text ui_t (Some ("Let's look for events that got at least 200 attending users",
+                                                     t.style)) in
+        let () = ui_t.Ui_events.url_input##value <- Js.string "" in
+        t.state <- `WriteString (create_ws "nb_attending > 200")
+      end
+      | `WriteString ws -> begin
+        if write_string ui_t ws then
+          let input = (Js.to_string ui_t.Ui_events.url_input##value) in
+          t.state <- `DoDbQuery (Ui_events.get_events_in_db ui_t (Some input))
+      end
+      | `DoDbQuery x -> begin
+        match Lwt.state x with
+          | Lwt.Return () -> t.state <- `Done
+          | _ -> ()
+      end
+      | `Done -> ()
+
+
+  let is_demo_finished t =
+    match t.state with
+      | `Done -> true
+      | _ -> false
+end
+
 module ButtonsMove =
 struct
   let start_wait = 0
@@ -221,6 +300,7 @@ type 'a demo_move = [
 | `ButtonMove of 'a MB.t
 | `SelectedEventMoveToReferenceEvent of 'a ERE.t
 | `ButtonMoveInReferenceEvent of 'a MB.t
+| `EventLanguageDemo of MakeEventLanguageDemo.t
 | `LastSelectedEventMove of 'a EAE.t
 | `LastButtonMove of 'a MB.t
 | `Done
@@ -236,7 +316,7 @@ let play_demo t = fun () ->
     | `SelectedEventMove arg -> begin
       EAE.next_move arg t.ui_events;
 
-      if EAE.is_demo_finished arg then t.demo <- `ButtonMove (MB.create "You can select a group of users and drop it in the set of all users"
+      if EAE.is_demo_finished arg then t.demo <- `ButtonMove (MB.create "You can drag a group of users and drop it in the users bin"
                                                                 "triangle-obtuse")
     end
     | `ButtonMove arg -> begin
@@ -248,19 +328,24 @@ let play_demo t = fun () ->
     | `SelectedEventMoveToReferenceEvent arg -> begin
       ERE.next_move arg t.ui_events;
       if ERE.is_demo_finished arg then t.demo <- `ButtonMoveInReferenceEvent (MB.create
-                                                                                "You can choose another group of users too (if a user is already there it won't be appended twice)"
+                                                                                "You can choose another group of facebook users (if a user is already in the bin it won't be counted twice)"
                                                                                 "triangle-obtuse")
     end
     | `ButtonMoveInReferenceEvent arg -> begin
       MB.next_move arg t.ui_events;
-      if MB.is_demo_finished arg then t.demo <- `LastSelectedEventMove (EAE.create
-                                                                          "You can add other events to the list of compared ones"
-                                                                          "triangle-obtuse-other")
+      if MB.is_demo_finished arg then t.demo <- `EventLanguageDemo (MakeEventLanguageDemo.create
+                                                                      "triangle-obtuse-other")
     end
+    | `EventLanguageDemo arg -> begin
+      MakeEventLanguageDemo.next_move arg t.ui_events;
+      if MakeEventLanguageDemo.is_demo_finished arg then t.demo <- `LastSelectedEventMove (EAE.create "Let's add one of the events with more than 200 attending users into additional events"
+                                                                                             "triangle-obtuse")
+    end
+
     | `LastSelectedEventMove arg -> begin
       EAE.next_move arg t.ui_events;
       if EAE.is_demo_finished arg then t.demo <- `LastButtonMove (MB.create
-                                                                    "And pick another set of users (here again, if a user is already there we won't be appended twice"
+                                                                    "Drag and drop another set of users (here again, if a user is already in the bin it won't be counted twice)"
                                                                     "triangle-obtuse-other")
     end
     | `LastButtonMove arg -> begin
@@ -289,7 +374,7 @@ let create
   let ui_with_demo =
     {
       ui_events = ui_events;
-      demo = `SelectedEventMove (EAE.create "You can first choose an event" "triangle-obtuse-other")
+      demo = `SelectedEventMove (EAE.create "First choose an event the audience you're looking for might have liked" "triangle-obtuse-other");
     }
   in
   ignore (Dom_html.window##setInterval(Js.wrap_callback (play_demo ui_with_demo),

@@ -18,6 +18,23 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
       | `Invited_ref -> "events_ref_invited.png"
       | `Not_invited_ref -> "events_ref_not_invited.png"
 
+
+  let users_inequation =
+    let make_icon u=
+      let s = 16 in
+      img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file u))) ~alt:"users" ~a:[a_height s; a_width s] ()
+    in
+    [make_icon `All_events;
+     pcdata " != ";
+     make_icon `Attended_ref;
+     pcdata " + ";
+     make_icon `Declined_ref;
+     pcdata " + ";
+     make_icon `Invited_ref;
+     pcdata " + ";
+     make_icon `Not_invited_ref;
+    ]
+
   let make_users_in_div ?usert:(u=`All) ?userid:(uid=None) ?draggable:(d=true) ?size:(s=16) text =
     let attributes = [a_height s; a_width s;
                       a_draggable d] in
@@ -29,8 +46,11 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
     [icon; pcdata text]
 
   let make_users_basket_in_div number_of_users =
-    make_users_in_div (Printf.sprintf "%d fans" number_of_users)
-      ~draggable:false ~size:42
+    let text =
+      if number_of_users == 0 then "Users bin"
+      else Printf.sprintf "%d users in the bin" number_of_users
+    in
+    make_users_in_div text ~draggable:false ~size:42
 }}
 
 {client{
@@ -338,11 +358,16 @@ let rec get_and_record_events t queryo =
   lwt events = %rpc_get_events (make_rpc_get_events_args t queryo ~offset:t.curr_offset)  in
   let () = List.iter (fun x -> Events_store.add t.events_in_db_container x.Utils.url x) events in
   let trs = List.map make_selectable_event events in
-  let db_table = Utils.make_table ~additional_class:["db_container"] ["Name"; "Owner"; "Location"; "Date"] trs in
+  let db_table = Utils.make_table
+ ~additional_class:["db_container"] ["Name"; "Owner"; "Location"; "Date"] trs in
   lwt other_links = compute_prev_next_handlers events in
   let new_span = [db_table] @ other_links in
   Html5.Manip.replaceChildren t.db_selected_events_span new_span;
   Lwt.return_unit
+
+let get_events_in_db t queryo =
+  t.curr_offset <- 0l;
+  get_and_record_events t queryo
 
 let on_db_input_changes t ev _ =
   let queryo =
@@ -350,8 +375,7 @@ let on_db_input_changes t ev _ =
       | "" -> None
       | str -> Some str
   in
-  t.curr_offset <- 0l;
-  get_and_record_events t queryo
+  get_events_in_db t queryo
 
 let get_event_data ev data_name =
   let data_val = ev##dataTransfer##getData((Js.string data_name)) in
@@ -384,7 +408,7 @@ let drop_event_id_in_selected_events t event_id =
   let () = Events_store.iter (fun url (_, s) ->
     trs:= tr ~a:[a_id url] (Utils.integrate_spans_in_td s) :: !trs)
     t.selected_events in
-  let table = Utils.make_complete_event_table !trs in
+  let table = Utils.make_complete_event_table ~caption:(Some "Additional events") !trs in
   Html5.Manip.replaceChildren t.selected_events_span [table];
     (* wait for the resolution of FB requests *)
   lwt () = match !to_resolve_lwt with
@@ -439,7 +463,7 @@ let drop_event_id_in_reference_event t event_id =
     | `Resolving (r, s) -> (r.Utils.url, s)
   in
   let trs = [tr ~a:[a_id id] (Utils.integrate_spans_in_td span)] in
-  let table = Utils.make_complete_event_table trs in
+  let table = Utils.make_complete_event_table ~caption:(Some "Reference event") trs in
   Html5.Manip.replaceChildren t.reference_event_span [table];
   (* wait for the resolution of FB requests *)
   lwt () = match !to_resolve_lwt with | None -> Lwt.return_unit | Some x -> x in

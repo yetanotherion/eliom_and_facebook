@@ -16,21 +16,29 @@ let view_service unused unused2 =
   let reference_event_div = div ~a:[a_class ["container"]] [reference_event_img; reference_event_span] in
 
   let all_users_div = div ~a:[a_class ["hidden"]] (Ui_events.make_users_basket_in_div 0) in
-  let legend_info = [(`All_events,
-                      "All corresponding fans.");
-                     (`Attended_ref,
-                      "Subset of corresponding fans that attended to the reference event.");
+  let legend_info = [(`Attended_ref,
+                      " attended to the reference event,");
                      (`Declined_ref,
-                      "Subset of corresponding fans that declined the reference event's invitation.");
+                      " declined the reference event's invitation,");
                      (`Invited_ref,
-                      "Subset of corresponding fans that were invited to the reference event.");
+                      " got invited to the reference event,");
                      (`Not_invited_ref,
-                      "Subset of corresponding fans that were not invited to the reference event.")] in
-  let in_legend_div = List.map (fun (x, text) -> div (Ui_events.make_users_in_div ~usert:x ~draggable:false ~size:20 text)) legend_info in
+                      " were not invited to the reference event.")] in
+  let create_div_map l f =
+    List.map (fun (x, text) -> f (Ui_events.make_users_in_div ~usert:x ~draggable:false ~size:20 text)) l
+  in
+  let in_legend_div =  List.fold_left List.append []
+    [create_div_map [(`All_events,
+                      " Facebook users that attended/declined/were invited to the event.")] div;
+     [div [pcdata "Among these users, we have the ones that:"]];
+     create_div_map legend_info (fun x -> div (pcdata "- " :: x));
+     [div [pcdata "(Note that as, among others, one can attend to an event without being invited, we can have:"]];
+     [div (List.append Ui_events.users_inequation [pcdata ")"])]]
+  in
   let legend_div = div ~a:[a_class ["hidden"]] in_legend_div in
   let user_select_ui_div =  div ~a:[a_class ["span9"]] [all_users_div;
-                                                        reference_event_div;
                                                         selected_events_div;
+                                                        reference_event_div;
                                                         legend_div] in
   let url_input = string_input ~input_type:`Text () in
   let _ = {unit{

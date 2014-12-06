@@ -13,6 +13,7 @@
   -moz-border-radius:10px;
   border-radius:10px;
   text-align: center;
+  font-size: 200%;
 }
 
 .triangle-obtuse-other {
@@ -30,4 +31,5 @@
   -moz-border-radius:10px;
   border-radius:10px;
   text-align: center;
+  font-size: 200%;
 }
