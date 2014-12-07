@@ -41,14 +41,22 @@ let view_service unused unused2 =
                                                         reference_event_div;
                                                         legend_div] in
   let url_input = string_input ~input_type:`Text () in
+  let example_queries = div ~a:[a_class ["hidden"]] [pcdata "Some query examples:";
+                                                     ul (List.map (fun x -> li [pcdata x])
+                                                           ["nb_invited >= 1000";
+                                                            "name != <some_name>";
+                                                            "owner = <some_owner>";
+                                                            "(nb_declined <= 100 nb_attending > 200 owner:<some_owner>) or (location:<some_city>)"
+                                                           ])]
+  in
   let _ = {unit{
-    let t = View_events.create
-                        %url_input
-                        %db_selected_events_span
-                        %all_users_div
-                        %reference_event_span %reference_event_img %reference_event_div
-                        %selected_events_span %selected_events_img %selected_events_div
-                        %legend_div %demo_text_span in
+    let ui_t = Ui_events.create %url_input %db_selected_events_span
+                                %all_users_div
+                                %reference_event_span %reference_event_img %reference_event_div
+                                %selected_events_span %selected_events_img %selected_events_div
+                                %legend_div %demo_text_span %example_queries
+    in
+    let t = View_events.create ui_t in
     View_events.setup t
   }}
   in
@@ -60,7 +68,8 @@ let view_service unused unused2 =
                             [div ~a:[a_class ["well"; "sidebar-nav"]]
                                 [ul ~a:[a_class ["nav"; "nav-list"]]
                                     [li ~a:[a_class ["active"]] [url_input];
-                                     li [db_selected_events_span]]]];
+                                     li [db_selected_events_span]]];
+                             example_queries];
                          user_select_ui_div]]] in
   let b = all_body @ Utils.bs_scripts in
   let h = Utils.bootstrap_metas @ Utils.bs_icons in

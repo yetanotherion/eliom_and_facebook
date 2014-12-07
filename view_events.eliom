@@ -356,20 +356,7 @@ let play_demo t = fun () ->
 
 let stop_demo t = t.demo <- `Done
 
-let create
-    url_input
-    db_selected_events_span
-    all_users_div
-    reference_event_span reference_event_img reference_event_div
-    selected_events_span selected_events_img selected_events_div
-    legend_div demo_span =
-  let ui_events = Ui_events.create
-    url_input
-    db_selected_events_span
-    all_users_div
-    reference_event_span reference_event_img reference_event_div
-    selected_events_span selected_events_img selected_events_div
-    legend_div demo_span in
+let create ui_events =
   let () = Random.self_init () in
   let ui_with_demo =
     {
@@ -395,7 +382,7 @@ let setup t =
   let ui_events = t.ui_events in
   async (fun () ->
          lwt () = Utils.lwt_autologin () in
-         Ui_events.get_and_record_events ui_events None);
+         Ui_events.get_events_in_db ui_events None);
   async (fun () ->
          changes ui_events.Ui_events.url_input (Ui_events.on_db_input_changes ui_events));
   async (fun () ->

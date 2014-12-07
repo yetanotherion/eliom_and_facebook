@@ -159,6 +159,7 @@ type 'a ui_events = {
   mutable buttons_move: ('a Eliom_content.Html5.elt * Animation.move list list) option;
   mutable all_users_container: Utils.RsvpSet.t;
   demo_text_span: 'a Eliom_content.Html5.elt;
+  example_queries: Dom_html.element Js.t;
 }
 
 let create
@@ -167,7 +168,7 @@ let create
     all_users_div
     reference_event_span reference_event_img reference_event_div
     selected_events_span selected_events_img selected_events_div
-    legend_div demo_text_span =
+    legend_div demo_text_span example_queries =
   {
     events_in_db_container = Events_store.create 100;
     selected_events = Events_store.create 100;
@@ -191,6 +192,7 @@ let create
     buttons_move = None;
     all_users_container = Utils.RsvpSet.empty;
     demo_text_span = demo_text_span;
+    example_queries = Html5.To_dom.of_element example_queries;
   }
 
 let make_user_button t user utype text =
@@ -367,7 +369,9 @@ let rec get_and_record_events t queryo =
 
 let get_events_in_db t queryo =
   t.curr_offset <- 0l;
-  get_and_record_events t queryo
+  lwt () = get_and_record_events t queryo in
+  let () = Utils.show_element t.example_queries in
+  Lwt.return_unit
 
 let on_db_input_changes t ev _ =
   let queryo =
