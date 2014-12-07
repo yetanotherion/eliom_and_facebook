@@ -328,7 +328,7 @@ let play_demo t = fun () ->
     | `SelectedEventMoveToReferenceEvent arg -> begin
       ERE.next_move arg t.ui_events;
       if ERE.is_demo_finished arg then t.demo <- `ButtonMoveInReferenceEvent (MB.create
-                                                                                "You can choose another group of facebook users (if a user is already in the bin it won't be counted twice)"
+                                                                                "You can choose another group of facebook users (if a user is already in the bin he won't be appended twice)"
                                                                                 "triangle-obtuse")
     end
     | `ButtonMoveInReferenceEvent arg -> begin
@@ -345,7 +345,7 @@ let play_demo t = fun () ->
     | `LastSelectedEventMove arg -> begin
       EAE.next_move arg t.ui_events;
       if EAE.is_demo_finished arg then t.demo <- `LastButtonMove (MB.create
-                                                                    "Drag and drop another set of users (here again, if a user is already in the bin it won't be counted twice)"
+                                                                    "Drag and drop another set of users (here again, if a user is already in the bin he won't be appended twice)"
                                                                     "triangle-obtuse-other")
     end
     | `LastButtonMove arg -> begin
