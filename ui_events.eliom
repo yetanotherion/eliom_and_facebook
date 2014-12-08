@@ -24,6 +24,7 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
       let s = 16 in
       img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file u))) ~alt:"users" ~a:[a_height s; a_width s] ()
     in
+    let overall_inequation =
     [make_icon `All_events;
      pcdata " != ";
      make_icon `Attended_ref;
@@ -33,7 +34,17 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
      make_icon `Invited_ref;
      pcdata " + ";
      make_icon `Not_invited_ref;
-    ]
+     pcdata ", but"
+    ] in
+    let overall_equation =
+      [make_icon `All_events;
+       pcdata " = ";
+       make_icon `Invited_ref;
+       pcdata " + ";
+       make_icon `Not_invited_ref]
+    in
+    let list_of_equations = List.rev (List.fold_left (fun a b -> (li b) :: a) [] [overall_inequation; overall_equation]) in
+    [ul list_of_equations]
 
   let make_users_in_div ?usert:(u=`All) ?userid:(uid=None) ?draggable:(d=true) ?size:(s=16) text =
     let attributes = [a_height s; a_width s;
@@ -412,7 +423,7 @@ let drop_event_id_in_selected_events t event_id =
   let () = Events_store.iter (fun url (_, s) ->
     trs:= tr ~a:[a_id url] (Utils.integrate_spans_in_td s) :: !trs)
     t.selected_events in
-  let table = Utils.make_complete_event_table ~caption:(Some "Additional events") !trs in
+  let table = Utils.make_complete_event_table ~caption:(Some "Events bin") !trs in
   Html5.Manip.replaceChildren t.selected_events_span [table];
     (* wait for the resolution of FB requests *)
   lwt () = match !to_resolve_lwt with

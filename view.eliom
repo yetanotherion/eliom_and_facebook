@@ -30,9 +30,9 @@ let view_service unused unused2 =
   let in_legend_div =  List.fold_left List.append []
     [create_div_map [(`All_events,
                       " Facebook users that attended, declined or were invited to the event. Among these users we have the ones that:")] div;
-     [ul (create_div_map legend_info li)]; (*(fun x -> div (pcdata "- " :: x));*)
-     [div [pcdata "(Note that as, among others, one can attend to an event without being invited, we can have:"]];
-     [div (List.append Ui_events.users_inequation [pcdata ")"])]]
+     [ul (create_div_map legend_info li)];
+     [div [pcdata "To understand more about these sets, note that :"]];
+     [div Ui_events.users_inequation]]
   in
   let legend_div = div ~a:[a_class ["hidden"]] in_legend_div in
   let user_select_ui_div =  div ~a:[a_class ["span9"]] [all_users_div;

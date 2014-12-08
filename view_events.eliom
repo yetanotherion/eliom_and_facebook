@@ -338,7 +338,7 @@ let play_demo t = fun () ->
     end
     | `EventLanguageDemo arg -> begin
       MakeEventLanguageDemo.next_move arg t.ui_events;
-      if MakeEventLanguageDemo.is_demo_finished arg then t.demo <- `LastSelectedEventMove (EAE.create "Let's add one of the events with more than 200 attending users into additional events"
+      if MakeEventLanguageDemo.is_demo_finished arg then t.demo <- `LastSelectedEventMove (EAE.create "Let's add one of the events with more than 200 attending users into the events bin"
                                                                                              "triangle-obtuse")
     end
 
