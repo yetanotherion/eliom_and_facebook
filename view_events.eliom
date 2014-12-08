@@ -207,22 +207,33 @@ module EventsToAdditionalEvents (S:SelectEventInDb) (M: WaitParam) = struct
     | None -> assert(false)
     | Some x -> x
 
-  let get_tbody_trs span =
-    let span = Html5.To_dom.of_element span in
-    let selected_events_children = Dom.list_of_nodeList (span##getElementsByTagName (Js.string "tbody")) in
+  let get_tbody_trs div =
+    let div = Html5.To_dom.of_element div in
+    let selected_events_children = Dom.list_of_nodeList (div##getElementsByTagName (Js.string "tbody")) in
     match selected_events_children with
       | [] -> None
       | tbody_element :: _ -> Some (tbody_element, List.map dom_node_to_element (Dom.list_of_nodeList tbody_element##childNodes))
 
-  let get_trs span =
-    match get_tbody_trs span with
+  let get_trs div =
+    match get_tbody_trs div with
       | None -> []
       | Some (_, trs) -> trs
 
   let select_event t trs =
-    let in_selected = get_trs t.Ui_events.selected_events_span in
-    let in_reference = get_trs t.Ui_events.reference_event_span in
-    let already_selected_events = List.map Utils.get_element_id (in_selected @ in_reference) in
+    let get_all_url event_store =
+      let res = ref [] in
+      let () = Ui_events.Events_store.iter (fun url _ ->
+        res := url :: !res) event_store
+      in
+      !res
+    in
+    let in_selected = get_all_url t.Ui_events.selected_events in
+    let already_selected_events =
+      match t.Ui_events.ref_event with
+        | `Undefined -> in_selected
+        | `Resolving (y, _) -> y.Utils.url :: in_selected
+        | `Resolved (y, _) -> y.Utils.ev_url :: in_selected
+    in
     let available = List.filter (fun x ->
       let x_id = Utils.get_element_id x in
       not (List.exists (fun y -> y = x_id) already_selected_events)) trs in
@@ -232,7 +243,7 @@ module EventsToAdditionalEvents (S:SelectEventInDb) (M: WaitParam) = struct
   let compute_move t additional_args =
     (* ensure list is not empty *)
     let open Ui_events in
-    match (get_tbody_trs t.db_selected_events_span) with
+    match (get_tbody_trs t.db_selected_events_div) with
       | None -> None
       | Some (tbody_element, trs) -> begin
         match trs with
@@ -282,12 +293,12 @@ module EventsToAdditionalEvents (S:SelectEventInDb) (M: WaitParam) = struct
 end
 
 module SelectAdditionalEvents = struct
-  let get_destination_element t = t.Ui_events.selected_events_img
+  let get_destination_element t = t.Ui_events.selected_events_table
   let drop_in_destination_element t event_id = Ui_events.drop_event_id_in_selected_events t event_id
 end
 
 module SelectReferenceEvent = struct
-  let get_destination_element t = t.Ui_events.reference_event_img
+  let get_destination_element t = t.Ui_events.reference_event_table
   let drop_in_destination_element t event_id = Ui_events.drop_event_id_in_reference_event t event_id
 end
 
@@ -388,14 +399,14 @@ let setup t =
   async (fun () ->
          dragovers ui_events.Ui_events.all_users_div ondragover);
   async (fun () ->
-         dragovers ui_events.Ui_events.selected_events_div ondragover);
+         dragovers ui_events.Ui_events.selected_events_div_container ondragover);
   async (fun () ->
-         dragovers ui_events.Ui_events.reference_event_div ondragover);
+         dragovers ui_events.Ui_events.reference_event_div_container ondragover);
   async (fun () ->
          drops ui_events.Ui_events.all_users_div (on_all_users_div_drop t));
   async (fun () ->
-         drops ui_events.Ui_events.reference_event_div (Ui_events.on_user_drop_in_ref_event ui_events));
+         drops ui_events.Ui_events.reference_event_div_container (Ui_events.on_user_drop_in_ref_event ui_events));
   async (fun () ->
-         drops ui_events.Ui_events.selected_events_div (Ui_events.on_user_drop_in_selected_events ui_events))
+         drops ui_events.Ui_events.selected_events_div_container (Ui_events.on_user_drop_in_selected_events ui_events))
 
 }}

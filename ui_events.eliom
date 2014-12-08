@@ -153,14 +153,14 @@ type 'a ui_events = {
   resolved_events_cache: Utils.event_and_users Events_store.t;
   nb_event_per_request: int;
   url_input: Dom_html.inputElement Js.t;
-  db_selected_events_span: 'a Eliom_content.Html5.elt;
+  db_selected_events_div: 'a Eliom_content.Html5.elt;
   all_users_div: Dom_html.element Js.t;
-  reference_event_span: 'a Eliom_content.Html5.elt;
-  reference_event_div: Dom_html.element Js.t;
-  reference_event_img: Dom_html.element Js.t;
-  selected_events_span: 'a Eliom_content.Html5.elt;
-  selected_events_div: Dom_html.element Js.t;
-  selected_events_img: Dom_html.element Js.t;
+  reference_event_div_container: Dom_html.element Js.t;
+  reference_event_div: 'a Eliom_content.Html5.elt;
+  reference_event_table: Dom_html.element Js.t;
+  selected_events_div_container: Dom_html.element Js.t;
+  selected_events_div: 'a Eliom_content.Html5.elt;
+  selected_events_table: Dom_html.element Js.t;
   legend_div: Dom_html.element Js.t;
   mutable ref_event: reference_event;
   mutable user_sets: user_sets;
@@ -175,10 +175,10 @@ type 'a ui_events = {
 
 let create
     url_input
-    db_selected_events_span
+    db_selected_events_div
     all_users_div
-    reference_event_span reference_event_img reference_event_div
-    selected_events_span selected_events_img selected_events_div
+    reference_event_div_container reference_event_div reference_event_table
+    selected_events_div_container selected_events_div selected_events_table
     legend_div demo_text_span example_queries =
   {
     events_in_db_container = Events_store.create 100;
@@ -186,14 +186,14 @@ let create
     resolved_events_cache = Events_store.create 100;
     nb_event_per_request = 5;
     url_input = Html5.To_dom.of_input url_input;
-    db_selected_events_span = db_selected_events_span;
+    db_selected_events_div = db_selected_events_div;
     all_users_div = Html5.To_dom.of_element all_users_div;
-    reference_event_span = reference_event_span;
-    reference_event_div = Html5.To_dom.of_element reference_event_div;
-    reference_event_img = Html5.To_dom.of_element reference_event_img;
-    selected_events_span = selected_events_span;
-    selected_events_div = Html5.To_dom.of_element selected_events_div;
-    selected_events_img = Html5.To_dom.of_element selected_events_img;
+    reference_event_div_container = Html5.To_dom.of_element reference_event_div_container;
+    reference_event_div = reference_event_div;
+    reference_event_table = Html5.To_dom.of_element reference_event_table;
+    selected_events_div_container = Html5.To_dom.of_element selected_events_div;
+    selected_events_div = selected_events_div;
+    selected_events_table = Html5.To_dom.of_element selected_events_table;
     legend_div = Html5.To_dom.of_element legend_div;
     ref_event = `Undefined;
     user_sets = create_user_sets ();
@@ -374,8 +374,8 @@ let rec get_and_record_events t queryo =
   let db_table = Utils.make_table
  ~additional_class:["db_container"] ["Name"; "Owner"; "Location"; "Date"] trs in
   lwt other_links = compute_prev_next_handlers events in
-  let new_span = [db_table] @ other_links in
-  Html5.Manip.replaceChildren t.db_selected_events_span new_span;
+  let new_div = [db_table] @ other_links in
+  Html5.Manip.replaceChildren t.db_selected_events_div new_div;
   Lwt.return_unit
 
 let get_events_in_db t queryo =
@@ -402,7 +402,6 @@ let get_button_id ev = get_event_data ev "button_id"
 let drop_event_id_in_selected_events t event_id =
   (* create the UI elements for new selected elements
      and launch the associated FB requests to compute attending, etc *)
-  Utils.hidde_element t.selected_events_img;
   let to_resolve_lwt = ref None in
   let () = match Events_store.mem t.selected_events event_id with
     | false -> begin
@@ -423,8 +422,8 @@ let drop_event_id_in_selected_events t event_id =
   let () = Events_store.iter (fun url (_, s) ->
     trs:= tr ~a:[a_id url] (Utils.integrate_spans_in_td s) :: !trs)
     t.selected_events in
-  let table = Utils.make_complete_event_table ~caption:(Some "Events bin") !trs in
-  Html5.Manip.replaceChildren t.selected_events_span [table];
+  let table = Utils.make_complete_event_table ~caption:(Some "Selected events") !trs in
+  Html5.Manip.replaceChildren t.selected_events_div [table];
     (* wait for the resolution of FB requests *)
   lwt () = match !to_resolve_lwt with
     | None -> Lwt.return_unit
@@ -439,7 +438,6 @@ let on_user_drop_in_selected_events t ev _ =
   drop_event_id_in_selected_events t (get_event_id ev)
 
 let drop_event_id_in_reference_event t event_id =
-  Utils.hidde_element t.reference_event_img;
   let to_resolve_lwt = ref None in
   let create_new_ref_event () =
     let event = Events_store.find t.events_in_db_container event_id in
@@ -479,7 +477,7 @@ let drop_event_id_in_reference_event t event_id =
   in
   let trs = [tr ~a:[a_id id] (Utils.integrate_spans_in_td span)] in
   let table = Utils.make_complete_event_table ~caption:(Some "Reference event") trs in
-  Html5.Manip.replaceChildren t.reference_event_span [table];
+  Html5.Manip.replaceChildren t.reference_event_div [table];
   (* wait for the resolution of FB requests *)
   lwt () = match !to_resolve_lwt with | None -> Lwt.return_unit | Some x -> x in
   (* compute differences *)

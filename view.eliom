@@ -6,15 +6,24 @@ open Eliom_parameter
 
 
 let view_service unused unused2 =
-  let db_selected_events_span = span [] in
-  let selected_events_span = span [] in
-  let selected_events_img = img ~src:(uri_of_string (fun () -> "imgs/add_additional_events.png")) ~alt:"put your selected events here" () in
-  let selected_events_div = div ~a:[a_class ["container"]] [selected_events_img; selected_events_span] in
-  let reference_event_span = span [] in
+  let db_selected_events_div = div [] in
+  let six = [1; 2; 3; 4; 5; 6; 7] in
+  let create_initial_table header message =
+    Utils.make_complete_event_table ~caption:(Some header)
+      [tr (List.map (fun d ->
+      let text =
+        if d = 1 then message
+        else ""
+      in
+      td [pcdata text]) six)]
+  in
+  let selected_events_table = create_initial_table "Selected events" "Drag and drop one of the events here" in
+  let selected_events_div = div [selected_events_table] in
+  let selected_events_div_container = div ~a:[a_class ["container"]] [selected_events_div] in
+  let reference_event_table = create_initial_table "Reference event" "Drag and drop a reference event here" in
+  let reference_event_div = div [reference_event_table] in
+  let reference_event_div_container = div ~a:[a_class ["container"]] [reference_event_div] in
   let demo_text_span = span [] in
-  let reference_event_img = img ~src:(uri_of_string (fun () -> "imgs/set_reference_event.png")) ~alt:"put your reference event here" () in
-  let reference_event_div = div ~a:[a_class ["container"]] [reference_event_img; reference_event_span] in
-
   let all_users_div = div ~a:[a_class ["hidden"]] (Ui_events.make_users_basket_in_div 0) in
   let legend_info = [(`Attended_ref,
                       " attended to the reference event,");
@@ -36,8 +45,8 @@ let view_service unused unused2 =
   in
   let legend_div = div ~a:[a_class ["hidden"]] in_legend_div in
   let user_select_ui_div =  div ~a:[a_class ["span9"]] [all_users_div;
-                                                        selected_events_div;
-                                                        reference_event_div;
+                                                        selected_events_div_container;
+                                                        reference_event_div_container;
                                                         legend_div] in
   let url_input = string_input ~input_type:`Text () in
   let example_queries = div ~a:[a_class ["hidden"]] [pcdata "Some query examples:";
@@ -49,10 +58,10 @@ let view_service unused unused2 =
                                                            ])]
   in
   let _ = {unit{
-    let ui_t = Ui_events.create %url_input %db_selected_events_span
+    let ui_t = Ui_events.create %url_input %db_selected_events_div
                                 %all_users_div
-                                %reference_event_span %reference_event_img %reference_event_div
-                                %selected_events_span %selected_events_img %selected_events_div
+                                %reference_event_div_container %reference_event_div %reference_event_table
+                                %selected_events_div_container %selected_events_div %selected_events_table
                                 %legend_div %demo_text_span %example_queries
     in
     let t = View_events.create ui_t in
@@ -67,7 +76,7 @@ let view_service unused unused2 =
                             [div ~a:[a_class ["well"; "sidebar-nav"]]
                                 [ul ~a:[a_class ["nav"; "nav-list"]]
                                     [li ~a:[a_class ["active"]] [url_input];
-                                     li [db_selected_events_span]]];
+                                     li [db_selected_events_div]]];
                              example_queries];
                          user_select_ui_div]]] in
   let b = all_body @ Utils.bs_scripts in

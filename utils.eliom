@@ -39,6 +39,25 @@
   let epoch_to_tz_date = epoch_to_fmt_date "%Y-%m-%dT%H:%M:%S%z"
   let epoch_to_light_date = epoch_to_fmt_date "%Y-%m-%d %H:%M"
 
+  let make_table ?caption:(table_caption=None) ?additional_class:(add_cl=[]) columns_name trs =
+    let curr_tbody = tbody trs in
+    let head_columns = tr (List.map (fun x -> th [pcdata x]) columns_name) in
+    let curr_thead = thead [head_columns] in
+    let curr_table =
+      match table_caption with
+        | None -> tablex ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody]
+        | Some x -> tablex ~caption:(caption [pcdata x]) ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody]
+    in
+    let all_class = "table-responsive" :: add_cl in
+    curr_table
+    (*div ~a:[a_class all_class] [curr_table]*)
+
+  let make_complete_event_table ?caption:(c=None) data =
+    make_table ~caption:c ["Name"; "Owner";
+                           "Location"; "Start_time";
+                           "attending"; "declined";
+                           "invited"] data
+
 }}
 
 let fb_root_div = div ~a:[a_id "fb-root"] []
@@ -256,24 +275,6 @@ let bootstrap_metas = [utf8_meta;
               spans.attending_span;
               spans.declined_span;
               spans.invited_span]
-
-  let make_table ?caption:(table_caption=None) ?additional_class:(add_cl=[]) columns_name trs =
-    let curr_tbody = tbody trs in
-    let head_columns = tr (List.map (fun x -> th [pcdata x]) columns_name) in
-    let curr_thead = thead [head_columns] in
-    let curr_table =
-      match table_caption with
-        | None -> tablex ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody]
-        | Some x -> tablex ~caption:(caption [pcdata x]) ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody]
-    in
-    let all_class = "table-responsive" :: add_cl in
-    div ~a:[a_class all_class] [curr_table]
-
-  let make_complete_event_table ?caption:(c=None) data =
-    make_table ~caption:c ["Name"; "Owner";
-                           "Location"; "Start_time";
-                           "attending"; "declined";
-                           "invited"] data
 
   let process_event_answer url res =
       match res with
