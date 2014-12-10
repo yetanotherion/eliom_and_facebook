@@ -12,7 +12,7 @@ type 'a move_state = [
 | `End ]
 
 (* the type checker was lost without that *)
-type 'a dom_type = ([> `Img | `PCDATA ] as 'a)
+type 'a dom_type = [> `Img | `PCDATA ] as 'a
 
 module type MakeMoveType = sig
   type additional_args
@@ -153,7 +153,7 @@ module MakeEventLanguageDemo = struct
       | _ -> false
 end
 
-module ButtonsMove =
+module ButtonsMove (M: sig val do_middle:bool end) =
 struct
   let start_wait = 0
   let end_wait = 100
@@ -169,7 +169,16 @@ struct
         let hd = List.nth t.buttons_to_move random_idx in
         let top, left, right, bottom = Utils.getBoundingClientRectCoordinates t.all_users_div in
         let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element hd) in
-        Some (hd, Animation.compute_funny_move curr_top curr_left top left)
+        let source = Animation.create_point curr_left curr_top in
+        let dest = Animation.create_point left top in
+        let move = match M.do_middle with
+          | false -> Animation.compute_funny_move source dest
+          | true -> begin
+            let mtop, mleft, mright, _ = Utils.getBoundingClientRectCoordinates t.Ui_events.legend_div in
+            Animation.compute_rebound_on_middle_move source dest mleft mright mtop
+          end
+        in
+        Some (hd, move)
       end
 
   let handle_move_end t () x =
@@ -264,7 +273,9 @@ module EventsToAdditionalEvents (S:SelectEventInDb) (M: WaitParam) = struct
             in
             additional_args.set_children_back <- Some set_back;
             Some (Html5.Of_dom.of_element event,
-                  Animation.compute_line_move curr_top curr_left top left)
+                  Animation.compute_line_move
+                    (Animation.create_point curr_left curr_top)
+                    (Animation.create_point left top))
           end
       end
 
@@ -302,18 +313,21 @@ module SelectReferenceEvent = struct
   let drop_in_destination_element t event_id = Ui_events.drop_event_id_in_reference_event t event_id
 end
 
-module MB = MakeMove (ButtonsMove)
+module ButtonsMoveNoMiddle = ButtonsMove (struct let do_middle = false end)
+module ButtonsMoveMiddle = ButtonsMove (struct let do_middle = true end)
+module MBN = MakeMove (ButtonsMoveNoMiddle)
+module MBM = MakeMove (ButtonsMoveMiddle)
 module EAE = MakeMove(EventsToAdditionalEvents(SelectAdditionalEvents) (struct let start_wait = 100 let end_wait = 0 end))
 module ERE = MakeMove(EventsToAdditionalEvents(SelectReferenceEvent) (struct let start_wait = 30 let end_wait = 0 end))
 
 type 'a demo_move = [
 | `SelectedEventMove of 'a EAE.t
-| `ButtonMove of 'a MB.t
+| `ButtonMove of 'a MBN.t
 | `SelectedEventMoveToReferenceEvent of 'a ERE.t
-| `ButtonMoveInReferenceEvent of 'a MB.t
+| `ButtonMoveInReferenceEvent of 'a MBM.t
 | `EventLanguageDemo of MakeEventLanguageDemo.t
 | `LastSelectedEventMove of 'a EAE.t
-| `LastButtonMove of 'a MB.t
+| `LastButtonMove of 'a MBM.t
 | `Done
 ]
 
@@ -327,24 +341,24 @@ let play_demo t = fun () ->
     | `SelectedEventMove arg -> begin
       EAE.next_move arg t.ui_events;
 
-      if EAE.is_demo_finished arg then t.demo <- `ButtonMove (MB.create "You can drag a group of users and drop it in the users bin"
+      if EAE.is_demo_finished arg then t.demo <- `ButtonMove (MBN.create "You can drag a group of users and drop it in the users bin"
                                                                 "triangle-obtuse")
     end
     | `ButtonMove arg -> begin
-      MB.next_move arg t.ui_events;
-      if MB.is_demo_finished arg then t.demo <- `SelectedEventMoveToReferenceEvent (ERE.create
+      MBN.next_move arg t.ui_events;
+      if MBN.is_demo_finished arg then t.demo <- `SelectedEventMoveToReferenceEvent (ERE.create
                                                                                       "To compare users relative to different events, you can set a reference event"
                                                                                       "triangle-obtuse-other")
     end
     | `SelectedEventMoveToReferenceEvent arg -> begin
       ERE.next_move arg t.ui_events;
-      if ERE.is_demo_finished arg then t.demo <- `ButtonMoveInReferenceEvent (MB.create
+      if ERE.is_demo_finished arg then t.demo <- `ButtonMoveInReferenceEvent (MBM.create
                                                                                 "You can choose another group of facebook users (if a user is already in the bin he won't be appended twice)"
                                                                                 "triangle-obtuse")
     end
     | `ButtonMoveInReferenceEvent arg -> begin
-      MB.next_move arg t.ui_events;
-      if MB.is_demo_finished arg then t.demo <- `EventLanguageDemo (MakeEventLanguageDemo.create
+      MBM.next_move arg t.ui_events;
+      if MBM.is_demo_finished arg then t.demo <- `EventLanguageDemo (MakeEventLanguageDemo.create
                                                                       "triangle-obtuse-other")
     end
     | `EventLanguageDemo arg -> begin
@@ -355,13 +369,13 @@ let play_demo t = fun () ->
 
     | `LastSelectedEventMove arg -> begin
       EAE.next_move arg t.ui_events;
-      if EAE.is_demo_finished arg then t.demo <- `LastButtonMove (MB.create
+      if EAE.is_demo_finished arg then t.demo <- `LastButtonMove (MBM.create
                                                                     "Drag and drop another set of users (here again, if a user is already in the bin he won't be appended twice)"
                                                                     "triangle-obtuse-other")
     end
     | `LastButtonMove arg -> begin
-      MB.next_move arg t.ui_events;
-      if MB.is_demo_finished arg then t.demo <- `Done
+      MBM.next_move arg t.ui_events;
+      if MBM.is_demo_finished arg then t.demo <- `Done
     end
     | `Done -> ()
 

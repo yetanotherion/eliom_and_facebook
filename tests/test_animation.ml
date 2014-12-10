@@ -48,8 +48,7 @@ let rec compute_x_range ?step:(s=20) sx dx =
   if sx > dx then List.rev (compute_x_range ~step:s dx sx)
   else range ~step:s (to_int sx) (to_int dx)
 
-let compute_between ?coeff:(c=1.0 /. 2.0) xO xD =
-  xO +. (xD -. xO) *. c
+let compute_between ?coeff:(c=1.0 /. 2.0) xO xD = xO +. (xD -. xO) *. c
 
 let line_func_param yO xO yD xD =
   (* y = slope * x + y_src *)
@@ -64,28 +63,51 @@ let line_func yO xO yD xD =
   fun x -> add (mult_float slope x) origin
 
 let parabolic_func_param ?coeff:(c=0.1) yO xO yD xD =
-  assert(c <> 0.5);
   (* move from O to D *)
   (* y = a * x * x + b * x + c *)
   (* lets choose the max abscisse *)
+  let c =
+    if yO = yD then 0.5
+    else c
+  in
   let maxX = compute_between ~coeff:c xO xD in
   (* yO = a *. xO *. xO + b *. XO + c *)
   (* yD = a *. xD *. xD + b *. XD + c *)
   (* replace c in yD with expression in yO *)
   (* a * (xO *. xO - xD *. xD) = (yO -. yD) - b. *. (xO -. xD) *)
   (* maxX = - b /. (2 *. a) *)
-  (* -c *. 2 *. a = b *)
-  (* a *. (xO *. xO - xD *. xD) - maxX *. 2 *. a * (xO -. xD) = yO - yD *)
-  (* a = (yO -. yD) / ((xO *. xO - xD *. xD) -maxX *. 2 *. (xO -. xD) *)
+  (* -maxX *. 2 *. a = b *)
   let open ProjectedY in
-  let a = div_float (sub yO yD) ((xO *. xO -. xD *. xD) -. maxX *. 2.0 *. (xO -. xD)) in
+  let a =
+    if c <> 0.5 then begin
+      (* a *. (xO *. xO - xD *. xD) - maxX *. 2 *. a * (xO -. xD) = yO - yD *)
+      (* a = (yO -. yD) / ((xO *. xO - xD *. xD) -maxX *. 2 *. (xO -. xD) *)
+      div_float (sub yO yD) ((xO *. xO -. xD *. xD) -. maxX *. 2.0 *. (xO -. xD))
+    end
+    else begin
+        (*we have an infinty of solutions so we choose yMax to be
+          yMax = yO + ((xO - xD) / 2)
+          using maxX on the general equation we have
+          yMax = a *. maxX *. maxX +. (-2 *.maxX *.a) *. maxX +. c
+          yMax = -a *. maxX^2 + c,
+          uxing xD on the equation:
+          c = yD - a * xD^2 + 2maxX * a * xD,
+          we replace c,
+          yMax = -a *. maxX^2 + yD - a * xD^2 + 2maxX * a * xD
+          yMax - yD = a (2maxX * XD - maxX^2 - XD^2)
+          let yMax = yD + upper *)
+        let upper = if xO < xD then (xO -. xD) /. 2.0 else (xD -. xO) /. 2.0 in
+        of_float (upper /. (2.0 *. maxX *. xD -. maxX *. maxX -. xD *. xD))
+        end
+  in
   let b = float_sub 0.0 (mult_float a (2.0 *.maxX)) in
   let c = sub yO (add (mult_float b xO) (mult_float a (xO *. xO))) in
-  (a, b, c)
+  a, b, c
 
 let parabolic_func ?coeff:(c=0.1) yO xO yD xD =
   let open ProjectedY in
   let a, b, c = parabolic_func_param ~coeff:c yO xO yD xD in
+  let () = Printf.printf "a:%f, b:%f, c:%f" (to_float a) (to_float b) (to_float c) in
   fun x -> add (add (mult_float a (x *. x)) (mult_float b x)) c
 
 let compute_one_basketball_traj ?coeff:(coeff=0.1) yO xO yD xD =
@@ -94,18 +116,22 @@ let compute_one_basketball_traj ?coeff:(coeff=0.1) yO xO yD xD =
   let open ProjectedY in
   if a <= zero then (f, f (project_in_x (div (sub zero b) (mult_float a 2.0))))
   else
+    (* make the curve look good, by computing
+       the symmetry from the line between the two points
+    *)
     let s, _ = line_func_param yO xO yD xD in
     let line_f = line_func yO xO yD xD in
     let f x =
       let yparabol = f x in
       let yline = line_f x in
-      (* yparabol = a * x2 + b * x + c *)
-      (* yline = s * x + r *)
-      (* y = 2 * (s * x + r) - yparabol *)
-      (* y' = 2 * s - 2 * a * x - b *)
-      (* max = (2 * s - b)  / (2 * a) *)
       add yline (sub yline yparabol)
     in
+    (* yparabol = a * x2 + b * x + c *)
+    (* yline = s * x + r *)
+    (* y = 2 * yline - yparabol *)
+    (* y' = 2 * s - 2 * a * x - b *)
+    (* 0 = 2 * s - 2 * a * max - b *)
+    (* max = (2 * s - b)  / (2 * a) *)
     (f, f (project_in_x (div (sub (mult_float s 2.0) b) (mult_float a 2.0))))
 
 let basketball_func yO xO yD xD =
@@ -121,6 +147,11 @@ let basketball_func yO xO yD xD =
  let (c, _) = List.hd (List.sort (fun (c1, max1) (c2, max2) -> Pervasives.compare max2 max1) filtered) in
  let f, _ = compute_one_basketball_traj ~coeff:c yO xO yD xD in
  f
+
+let rec compute_x_range ?step:(s=20) sx dx =
+  let to_int x = int_of_float x in
+  if sx > dx then List.rev (compute_x_range ~step:s dx sx)
+  else range ~step:s (to_int sx) (to_int dx)
 
 let make_test1 () =
   let (yD, xD) = (ProjectedY.of_float 40.0, 400.0) in
@@ -152,7 +183,7 @@ let make_gnuplot_script gnuplot_f data_f =
 let make_f_test f name =
   let ps = Printf.sprintf in
   let (yD, xD) = (ProjectedY.of_float 40.0, 400.0) in
-  let (yO, xO) = (ProjectedY.of_float 140.0, 1500.0)  in
+  let (yO, xO) = (ProjectedY.of_float 40.0, 1500.0)  in
   let f = f yO xO yD xD in
   let r = List.map (fun x -> float_of_int x) (compute_x_range xO xD) in
   let () = write_lines (ps "%s.dat" name) (List.map (fun x -> Printf.sprintf "%f %s" x (ProjectedY.to_string (f x))) r) in
@@ -162,7 +193,8 @@ let make_f_test f name =
   ();;
 
 let make_test2 () =
-  make_f_test parabolic_func "parabolic";;
+  make_f_test (fun yO xO yD xD ->
+    parabolic_func ~coeff:0.5 yO xO yD xD) "parabolic";;
 
 let make_test3 () =
   make_f_test line_func "line";;

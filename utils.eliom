@@ -48,9 +48,7 @@
         | None -> tablex ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody]
         | Some x -> tablex ~caption:(caption [pcdata x]) ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody]
     in
-    let all_class = "table-responsive" :: add_cl in
     curr_table
-    (*div ~a:[a_class all_class] [curr_table]*)
 
   let make_complete_event_table ?caption:(c=None) data =
     make_table ~caption:c ["Name"; "Owner";
@@ -75,20 +73,40 @@ let bootstrap_metas = [utf8_meta;
 
   let getBoundingClientRect element = element##getBoundingClientRect()
 
+  let log s = Firebug.console##log(Js.string s)
+
+(* XXX
+http://javascript.info/tutorial/coordinates
+function getOffsetRect(elem) {
+  // (1)
+  var box = elem.getBoundingClientRect()
+  var body = document.body
+  var docElem = document.documentElement
+  // (2)
+  var scrollTop = window.pageYOffset || docElem.scrollTop || body.scrollTop
+  var scrollLeft = window.pageXOffset || docElem.scrollLeft || body.scrollLeft
+
+  // (3)
+  var clientTop = docElem.clientTop || body.clientTop || 0
+  var clientLeft = docElem.clientLeft || body.clientLeft || 0
+
+  // (4)
+
+  var top  = box.top +  scrollTop - clientTop
+  var left = box.left + scrollLeft - clientLeft
+  return { top: Math.round(top), left: Math.round(left) }
+}
+
+*)
   let getBoundingClientRectCoordinates element =
+    let html_top = Dom_html.document##documentElement##scrollTop in
+    let html_left = Dom_html.document##documentElement##scrollLeft in
+    let body_top = Dom_html.document##body##scrollTop in
+    let body_left = Dom_html.document##body##scrollLeft in
+    let () = log (Printf.sprintf "html_top: %d, html_left: %d body_top:%d body_left: %d"
+           html_top html_left body_top body_left) in
     let box = getBoundingClientRect element in
     box##top, box##left, box##right, box##bottom
-
-  let getOffsetRect element =
-    let box = getBoundingClientRect element in
-    (* we don't support IE < 9
-       http://javascript.info/tutorial/coordinates
-    *)
-    let top = (Js.parseInt box##top) (*+ scrollTop - clientTop *) in
-    let left = (Js.parseInt box##left) (* + scrollLeft - clientLeft*) in
-    let right = (Js.parseInt box##right) in
-    let bottom = (Js.parseInt box##bottom) in
-    top, left, right, bottom
 
   let make_rsvp_set rsvp_list =
     List.fold_left (fun s elt -> RsvpSet.add elt s) RsvpSet.empty rsvp_list
@@ -299,8 +317,6 @@ let bootstrap_metas = [utf8_meta;
      td [pcdata event.owner];
      td [pcdata event.location];
      td [pcdata (epoch_to_light_date event.start_date)]]
-
-  let log s = Firebug.console##log(Js.string s)
 
 }}
 

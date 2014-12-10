@@ -46,7 +46,7 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
     let list_of_equations = List.rev (List.fold_left (fun a b -> (li b) :: a) [] [overall_inequation; overall_equation]) in
     [ul list_of_equations]
 
-  let make_users_in_div ?usert:(u=`All) ?userid:(uid=None) ?draggable:(d=true) ?size:(s=16) text =
+  let make_icon_and_text ?usert:(u=`All) ?userid:(uid=None) ?draggable:(d=true) ?size:(s=16) text =
     let attributes = [a_height s; a_width s;
                       a_draggable d] in
     let attributes = match uid with
@@ -54,7 +54,11 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
       | Some x -> (a_id (Printf.sprintf "%d" x)) :: attributes
     in
     let icon = img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file u))) ~alt:"users" ~a:attributes () in
-    [icon; pcdata text]
+    (icon, pcdata text)
+
+  let make_users_in_div ?usert:(u=`All) ?userid:(uid=None) ?draggable:(d=true) ?size:(s=16) text =
+    let icon, text = make_icon_and_text ~usert:u ~userid:uid ~draggable:d ~size:s text in
+    [icon; text]
 
   let make_users_basket_in_div number_of_users =
     let text =
@@ -211,12 +215,8 @@ let create
   }
 
 let make_user_button t user utype text =
-  let button = make_users_in_div ~usert:utype ~userid:(Some user.user_id) text in
-  let res = div button in
-  let () = match button with
-    | hd :: _ -> t.buttons_to_move <- hd :: t.buttons_to_move
-    | _ -> ()
-  in
+  let button, text = make_icon_and_text ~usert:utype ~userid:(Some user.user_id) text in
+  let res = div [button; text] in
   let res_dom = Html5.To_dom.of_element res in
   let open Lwt_js_events in
   let ondragstarts ev _ =
@@ -225,7 +225,7 @@ let make_user_button t user utype text =
     Lwt.return_unit
   in
   Lwt.async (fun () -> dragstarts res_dom ondragstarts);
-  res
+  res, button
 
 let display_compared_rsvp t event compared_users compared_span =
   (*let () = check_event_coherence event in*)
@@ -236,30 +236,29 @@ let display_compared_rsvp t event compared_users compared_span =
   let user_sets, common_invited = append_new_user_set user_sets (common_users event.Utils.invited compared_users) in
   let not_invited_users = Utils.RsvpSet.diff compared_users_set common_invited.users in
   let user_sets, not_invited = append_new_user_set user_sets not_invited_users in
-  Html5.Manip.replaceChildren compared_span
-    (List.map (fun (u, x, y) -> make_user_button t u x y) [(compared_user, `All_events,
-                                                          Printf.sprintf "%d" (List.length compared_users));
-                                                         (common_attending, `Attended_ref,
-                                                          Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_attending.users));
-                                                         (common_declined, `Declined_ref ,
-                                                          Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_declined.users));
-                                                         (common_invited, `Invited_ref,
-                                                          Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_invited.users));
-                                                         (not_invited, `Not_invited_ref,
-                                                          Printf.sprintf "%d" (Utils.RsvpSet.cardinal not_invited.users))]);
-  t.user_sets <- user_sets
+  let buttons = List.map (fun (u, x, y) -> make_user_button t u x y) [(compared_user, `All_events,
+                                                                       Printf.sprintf "%d" (List.length compared_users));
+                                                                      (common_attending, `Attended_ref,
+                                                                       Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_attending.users));
+                                                                      (common_declined, `Declined_ref ,
+                                                                       Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_declined.users));
+                                                                      (common_invited, `Invited_ref,
+                                                                       Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_invited.users));
+                                                                      (not_invited, `Not_invited_ref,
+                                                                       Printf.sprintf "%d" (Utils.RsvpSet.cardinal not_invited.users))]
+  in
+  Html5.Manip.replaceChildren compared_span (List.map Pervasives.fst buttons);
+  t.user_sets <- user_sets;
+  List.map Pervasives.snd buttons
 
 let display_rsvp t users span =
   (*let () = check_event_coherence event in*)
   let user_sets, displayed_users = append_new_user_set t.user_sets (Utils.make_rsvp_set users) in
-  Html5.Manip.replaceChildren span [make_user_button t displayed_users `All_events
-                                       (Printf.sprintf "%d" (List.length users))];
-  t.user_sets <- user_sets
-
-let display_resolved_event t resolved_event spans =
-  List.iter (fun (u, s) -> display_rsvp t u s) [(resolved_event.Utils.attending, spans.Utils.attending_span);
-                                                (resolved_event.Utils.declined, spans.Utils.declined_span);
-                                                (resolved_event.Utils.invited, spans.Utils.invited_span)]
+  let buttons = [make_user_button t displayed_users `All_events
+                    (Printf.sprintf "%d" (List.length users))] in
+  Html5.Manip.replaceChildren span (List.map Pervasives.fst buttons);
+  t.user_sets <- user_sets;
+  List.map Pervasives.snd buttons
 
 let process_event t event spans user_ref =
  try_lwt
@@ -275,7 +274,6 @@ let process_event t event spans user_ref =
       lwt (attending, declined, invited) = Utils.process_all_rsvp event_url in
       let resolved_event = Utils.make_event_and_users event_url event attending declined invited in
       user_ref := Some resolved_event;
-      display_resolved_event t resolved_event spans;
       Lwt.return_unit
     end
   with x -> begin
@@ -296,6 +294,8 @@ let resolve_event t event spans =
  let () = Events_store.add t.resolved_events_cache event.Utils.url resolved_event in
  Lwt.return_unit
 
+let flatten l = List.fold_left List.append [] l
+
 let display_event ?ref_event:(r=None) t event span =
   let f arg =
     let u, s = arg in
@@ -303,11 +303,9 @@ let display_event ?ref_event:(r=None) t event span =
     | None -> display_rsvp t u s
     | Some ref_event -> display_compared_rsvp t ref_event u s
   in
-  List.iter f [(event.Utils.attending, span.Utils.attending_span);
-               (event.Utils.declined, span.Utils.declined_span);
-               (event.Utils.invited, span.Utils.invited_span)]
-
-
+  flatten (List.map f [(event.Utils.attending, span.Utils.attending_span);
+                       (event.Utils.declined, span.Utils.declined_span);
+                       (event.Utils.invited, span.Utils.invited_span)])
 let refresh_ui t =
  let resolved_events = ref [] in
  let () = Events_store.iter (fun k (event, spans) ->
@@ -316,20 +314,23 @@ let refresh_ui t =
      | `Resolved x -> resolved_events:= (x, spans) :: !resolved_events)
    t.selected_events
  in
- let ref_event_resolved =
+ let buttons, ref_event_resolved =
  match t.ref_event with
    | `Undefined | `Resolving (_, _) -> begin
-     List.iter (fun (curr_event, span) ->
-       display_event t curr_event span) !resolved_events;
-     false
+     (flatten (List.map (fun (curr_event, span) ->
+                         display_event t curr_event span)
+               !resolved_events),
+      false)
    end
    | `Resolved (ref_event, ref_span) -> begin
-     List.iter (fun (curr_event, span) ->
-       display_event ~ref_event:(Some ref_event) t curr_event span) !resolved_events;
-     display_event t ref_event ref_span;
-     true
+     let ref_buttons = display_event t ref_event ref_span in
+     let all_other_buttons = flatten (List.map (fun (curr_event, span) ->
+                                      display_event ~ref_event:(Some ref_event) t curr_event span)
+                                      !resolved_events) in
+     (List.append ref_buttons all_other_buttons, true)
    end
  in
+ t.buttons_to_move <- buttons;
  Utils.show_element t.all_users_div;
  if List.length !resolved_events > 0 && ref_event_resolved then (
    Utils.show_element t.legend_div)
@@ -416,9 +417,7 @@ let drop_event_id_in_selected_events t event_id =
         | false -> let () = to_resolve_lwt:= Some (resolve_event t event spans) in
                    Events_store.add t.selected_events event.Utils.url ((`Resolving event, spans))
         | true -> let resolved_event = Events_store.find t.resolved_events_cache event_id in
-                  let () = Events_store.add t.selected_events event.Utils.url ((`Resolved resolved_event, spans)) in
-                  display_resolved_event t resolved_event spans
-
+                  Events_store.add t.selected_events event.Utils.url ((`Resolved resolved_event, spans))
     end
     | true -> () in
     (* display the UI with temporarily non available data *)
@@ -461,8 +460,7 @@ let drop_event_id_in_reference_event t event_id =
       | false -> let () = to_resolve_lwt := Some (resolve_ref_event ()) in
                  t.ref_event <- `Resolving (event, spans)
       | true -> let resolved_event = Events_store.find t.resolved_events_cache event_id in
-                let () = t.ref_event <- `Resolved (resolved_event, spans) in
-                display_resolved_event t resolved_event spans
+                t.ref_event <- `Resolved (resolved_event, spans);
   in
   let () = match t.ref_event with
     | `Undefined -> create_new_ref_event ()
