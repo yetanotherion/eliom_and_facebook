@@ -17,10 +17,12 @@ let view_service unused unused2 =
       in
       td [pcdata text]) six)]
   in
-  let selected_events_table = create_initial_table "Selected events" "Drag and drop one of the events here" in
+  let selected_events_title = "Selected events" in
+  let reference_event_title = "Reference event" in
+  let selected_events_table = create_initial_table selected_events_title "Drag and drop one of the events here" in
   let selected_events_div = div [selected_events_table] in
   let selected_events_div_container = div ~a:[a_class ["container"]] [selected_events_div] in
-  let reference_event_table = create_initial_table "Reference event" "Drag and drop a reference event here" in
+  let reference_event_table = create_initial_table reference_event_title "Drag and drop a reference event here" in
   let reference_event_div = div [reference_event_table] in
   let reference_event_div_container = div ~a:[a_class ["container"]] [reference_event_div] in
   let demo_text_span = span [] in
@@ -60,8 +62,8 @@ let view_service unused unused2 =
   let _ = {unit{
     let ui_t = Ui_events.create %url_input %db_selected_events_div
                                 %all_users_div
-                                %reference_event_div_container %reference_event_div %reference_event_table
-                                %selected_events_div_container %selected_events_div %selected_events_table
+                                %reference_event_title %reference_event_div_container %reference_event_div %reference_event_table
+                                %selected_events_title %selected_events_div_container %selected_events_div %selected_events_table
                                 %legend_div %demo_text_span %example_queries
     in
     let t = View_events.create ui_t in

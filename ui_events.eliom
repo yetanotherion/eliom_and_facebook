@@ -155,9 +155,11 @@ type 'a ui_events = {
   url_input: Dom_html.inputElement Js.t;
   db_selected_events_div: 'a Eliom_content.Html5.elt;
   all_users_div: Dom_html.element Js.t;
+  reference_event_title: string;
   reference_event_div_container: Dom_html.element Js.t;
   reference_event_div: 'a Eliom_content.Html5.elt;
   reference_event_table: Dom_html.element Js.t;
+  selected_events_title: string;
   selected_events_div_container: Dom_html.element Js.t;
   selected_events_div: 'a Eliom_content.Html5.elt;
   selected_events_table: Dom_html.element Js.t;
@@ -177,8 +179,8 @@ let create
     url_input
     db_selected_events_div
     all_users_div
-    reference_event_div_container reference_event_div reference_event_table
-    selected_events_div_container selected_events_div selected_events_table
+    reference_event_title reference_event_div_container reference_event_div reference_event_table
+    selected_events_title selected_events_div_container selected_events_div selected_events_table
     legend_div demo_text_span example_queries =
   {
     events_in_db_container = Events_store.create 100;
@@ -188,9 +190,11 @@ let create
     url_input = Html5.To_dom.of_input url_input;
     db_selected_events_div = db_selected_events_div;
     all_users_div = Html5.To_dom.of_element all_users_div;
+    reference_event_title = reference_event_title;
     reference_event_div_container = Html5.To_dom.of_element reference_event_div_container;
     reference_event_div = reference_event_div;
     reference_event_table = Html5.To_dom.of_element reference_event_table;
+    selected_events_title = selected_events_title;
     selected_events_div_container = Html5.To_dom.of_element selected_events_div;
     selected_events_div = selected_events_div;
     selected_events_table = Html5.To_dom.of_element selected_events_table;
@@ -422,7 +426,7 @@ let drop_event_id_in_selected_events t event_id =
   let () = Events_store.iter (fun url (_, s) ->
     trs:= tr ~a:[a_id url] (Utils.integrate_spans_in_td s) :: !trs)
     t.selected_events in
-  let table = Utils.make_complete_event_table ~caption:(Some "Selected events") !trs in
+  let table = Utils.make_complete_event_table ~caption:(Some t.selected_events_title) !trs in
   Html5.Manip.replaceChildren t.selected_events_div [table];
     (* wait for the resolution of FB requests *)
   lwt () = match !to_resolve_lwt with
@@ -476,7 +480,7 @@ let drop_event_id_in_reference_event t event_id =
     | `Resolving (r, s) -> (r.Utils.url, s)
   in
   let trs = [tr ~a:[a_id id] (Utils.integrate_spans_in_td span)] in
-  let table = Utils.make_complete_event_table ~caption:(Some "Reference event") trs in
+  let table = Utils.make_complete_event_table ~caption:(Some t.reference_event_title) trs in
   Html5.Manip.replaceChildren t.reference_event_div [table];
   (* wait for the resolution of FB requests *)
   lwt () = match !to_resolve_lwt with | None -> Lwt.return_unit | Some x -> x in
