@@ -304,12 +304,12 @@ module EventsToAdditionalEvents (S:SelectEventInDb) (M: WaitParam) = struct
 end
 
 module SelectAdditionalEvents = struct
-  let get_destination_element t = t.Ui_events.selected_events_table
+  let get_destination_element t = Html5.To_dom.of_element t.Ui_events.selected_events_div
   let drop_in_destination_element t event_id = Ui_events.drop_event_id_in_selected_events t event_id
 end
 
 module SelectReferenceEvent = struct
-  let get_destination_element t = t.Ui_events.reference_event_table
+  let get_destination_element t = Html5.To_dom.of_element t.Ui_events.reference_event_div
   let drop_in_destination_element t event_id = Ui_events.drop_event_id_in_reference_event t event_id
 end
 

@@ -173,7 +173,7 @@ let do_one_move x move =
 let move_done = ref false
 
 let do_move x move =
-  Html5.Manip.SetCss.position x "absolute";
+  Html5.Manip.SetCss.position x "fixed";
   List.iter (fun m -> do_one_move x m) move
 
 let compute_move ?step:(s=20) sx dx f =
@@ -188,8 +188,8 @@ type point = {
 
 let create_point x y = {x=x; y=y;}
 
-let compute_basketball_move yO xO yD xD =
-  compute_move xO xD (basketball_func yO xO yD xD)
+let compute_basketball_move ?step:(s=20) yO xO yD xD =
+  compute_move ~step:s xO xD (basketball_func yO xO yD xD)
 
 let compute_line_move source dest =
   let open ProjectedY in
@@ -242,7 +242,8 @@ let compute_rebound_on_middle_move source dest mleft mright mtop =
     let xD, yD = b in
     let (xO, yO), previous_moves = a in
     let curr_move =
-      try compute_basketball_move yO xO yD xD
+      (* slow down the move *)
+      try compute_basketball_move ~step:15 yO xO yD xD
       with (Failure _) -> (
         Utils.log (Printf.sprintf "failure xO: %f xD:%f" xO xD);
         [])
