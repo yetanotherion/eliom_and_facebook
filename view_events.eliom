@@ -1,24 +1,23 @@
 {client{
 open Eliom_content
 open Html5.D
-type 'a one_move = ('a Eliom_content.Html5.elt * Animation.move list list)
 
-type 'a move_state = [
-| `NoAnimation
-| `WaitForStart of int
-| `DuringMove of 'a one_move
-| `WaitForEnd of int
-| `WaitForMoveEnd
-| `End ]
+type 'a dom_type = 'a constraint [>`Img | `PCDATA] = 'a
+type 'a one_move = ('a dom_type elt * Animation.move list list)
 
-(* the type checker was lost without that *)
-type 'a dom_type = [> `Img | `PCDATA ] as 'a
+type 'a move_state =
+  | NoAnimation
+  | WaitForStart of int
+  | DuringMove of 'a one_move
+  | WaitForEnd of int
+  | WaitForMoveEnd
+  | End
 
 module type MakeMoveType = sig
   type additional_args
   val create_additional_args: unit -> additional_args
-  val compute_move: 'a dom_type Ui_events.ui_events -> additional_args -> 'a dom_type one_move option
-  val handle_move_end: 'a dom_type Ui_events.ui_events -> additional_args -> 'a dom_type Eliom_content.Html5.elt -> unit
+  val compute_move: 'a dom_type Ui_events.ui_events -> additional_args -> 'a one_move option
+  val handle_move_end: 'a dom_type Ui_events.ui_events -> additional_args -> 'a dom_type elt -> unit
   val handle_wait_end: 'a dom_type Ui_events.ui_events -> additional_args -> unit
   val finished: 'a dom_type Ui_events.ui_events -> additional_args -> bool
   val start_wait: int
@@ -31,46 +30,48 @@ module MakeMove (M:MakeMoveType) = struct
                 text: string;
                 style: string;
               }
-  let create text style = { state = `NoAnimation;
+
+  let create text style = { state = NoAnimation;
                             additional_args = M.create_additional_args ();
                             text = text;
                             style = style }
+
   let next_move t ui_t =
     let open Ui_events in
     match t.state with
-      | `NoAnimation -> t.state <- `WaitForStart 0
-      | `WaitForStart x -> begin
-        if x < M.start_wait then t.state <- `WaitForStart (x + 1)
+      | NoAnimation -> t.state <- WaitForStart 0
+      | WaitForStart x -> begin
+        if x < M.start_wait then t.state <- WaitForStart (x + 1)
         else
           let () = Ui_events.set_demo_text ui_t (Some (t.text, t.style)) in
           match M.compute_move ui_t t.additional_args with
             | None -> ()
-            | Some m -> t.state <- `DuringMove m
+            | Some m -> t.state <- DuringMove m
       end
-      | `DuringMove (x, l) -> begin
+      | DuringMove (x, l) -> begin
         match l with
           | hd :: tl -> begin
             Animation.do_move x hd;
-            t.state <- `DuringMove (x, tl)
+            t.state <- DuringMove (x, tl)
           end
           | [] -> begin
             M.handle_move_end ui_t t.additional_args x;
             refresh_ui ui_t;
-            t.state <- `WaitForEnd 0
+            t.state <- WaitForEnd 0
           end
       end
-      | `WaitForEnd x ->
-        if x < M.end_wait then t.state <- `WaitForEnd (x + 1)
+      | WaitForEnd x ->
+        if x < M.end_wait then t.state <- WaitForEnd (x + 1)
         else begin
           M.handle_wait_end ui_t t.additional_args;
-          t.state <- `WaitForMoveEnd
+          t.state <- WaitForMoveEnd
         end
-      | `WaitForMoveEnd ->
-         if M.finished ui_t t.additional_args then t.state <- `End
-      | `End -> ()
+      | WaitForMoveEnd ->
+         if M.finished ui_t t.additional_args then t.state <- End
+      | End -> ()
 
   let is_demo_finished t =
-    match t.state with `End -> true | _ -> false
+    match t.state with End -> true | _ -> false
 
 end
 
@@ -90,14 +91,16 @@ module MakeEventLanguageDemo = struct
 
   type t = {
     mutable state: state;
+    text: string;
     style: string;
   }
   let create_ws string = {
     wait_for_typping = wait_to_type;
     string_to_be_typed = Some string;
   }
-  let create style =
+  let create text style =
     { state = `Init;
+      text = text;
       style = style; }
 
   let write_string ui ws =
@@ -129,8 +132,7 @@ module MakeEventLanguageDemo = struct
   let next_move t ui_t =
     match t.state with
       | `Init -> begin
-        let () = Ui_events.set_demo_text ui_t (Some ("Let's look for events that got at least 200 attending users",
-                                                     t.style)) in
+        let () = Ui_events.set_demo_text ui_t (Some (t.text, t.style)) in
         let () = ui_t.Ui_events.url_input##value <- Js.string "" in
         t.state <- `WriteString (create_ws "nb_attending > 200")
       end
@@ -320,73 +322,88 @@ module MBM = MakeMove (ButtonsMoveMiddle)
 module EAE = MakeMove(EventsToAdditionalEvents(SelectAdditionalEvents) (struct let start_wait = 100 let end_wait = 0 end))
 module ERE = MakeMove(EventsToAdditionalEvents(SelectReferenceEvent) (struct let start_wait = 30 let end_wait = 0 end))
 
-type 'a demo_move = [
-| `SelectedEventMove of 'a EAE.t
-| `ButtonMove of 'a MBN.t
-| `SelectedEventMoveToReferenceEvent of 'a ERE.t
-| `ButtonMoveInReferenceEvent of 'a MBM.t
-| `EventLanguageDemo of MakeEventLanguageDemo.t
-| `LastSelectedEventMove of 'a EAE.t
-| `LastButtonMove of 'a MBM.t
-| `Done
-]
+class type ['a] demo_move_type =
+object
+  method next_move: 'a dom_type Ui_events.ui_events -> unit
+  method is_demo_finished: unit -> bool
+end
+
+class ['a] event_language_demo init =
+object
+  val arg = init
+  method next_move (t:'a dom_type Ui_events.ui_events) = MakeEventLanguageDemo.next_move arg t
+  method is_demo_finished () = MakeEventLanguageDemo.is_demo_finished arg
+end
+
+class ['a] eae init =
+object
+  val arg = init
+  method next_move (t:'a dom_type Ui_events.ui_events) = EAE.next_move arg t
+  method is_demo_finished () = EAE.is_demo_finished arg
+end
+
+class ['a] ere init =
+object
+  val arg = init
+  method next_move (t: 'a dom_type Ui_events.ui_events) = ERE.next_move arg t
+  method is_demo_finished () = ERE.is_demo_finished arg
+end
+
+
+class ['a] mbn init =
+object
+  val arg = init
+  method next_move (t: 'a dom_type Ui_events.ui_events) = MBN.next_move arg t
+  method is_demo_finished () = MBN.is_demo_finished arg
+end
+
+class ['a] mbm init =
+object
+  val arg = init
+  method next_move (t: 'a dom_type Ui_events.ui_events) = MBM.next_move arg t
+  method is_demo_finished () = MBM.is_demo_finished arg
+end
 
 type 'a ui_with_demo = {
   ui_events: 'a Ui_events.ui_events;
-  mutable demo: 'a demo_move;
+  mutable demo: 'a demo_move_type list;
 }
 
 let play_demo t = fun () ->
   match t.demo with
-    | `SelectedEventMove arg -> begin
-      EAE.next_move arg t.ui_events;
-
-      if EAE.is_demo_finished arg then t.demo <- `ButtonMove (MBN.create "You can drag a group of users and drop it in the users bin"
-                                                                "triangle-obtuse")
-    end
-    | `ButtonMove arg -> begin
-      MBN.next_move arg t.ui_events;
-      if MBN.is_demo_finished arg then t.demo <- `SelectedEventMoveToReferenceEvent (ERE.create
-                                                                                      "To compare users relative to different events, you can set a reference event"
-                                                                                      "triangle-obtuse-other")
-    end
-    | `SelectedEventMoveToReferenceEvent arg -> begin
-      ERE.next_move arg t.ui_events;
-      if ERE.is_demo_finished arg then t.demo <- `ButtonMoveInReferenceEvent (MBM.create
-                                                                                "You can choose another group of facebook users (if a user is already in the bin he won't be appended twice)"
-                                                                                "triangle-obtuse")
-    end
-    | `ButtonMoveInReferenceEvent arg -> begin
-      MBM.next_move arg t.ui_events;
-      if MBM.is_demo_finished arg then t.demo <- `EventLanguageDemo (MakeEventLanguageDemo.create
-                                                                      "triangle-obtuse-other")
-    end
-    | `EventLanguageDemo arg -> begin
-      MakeEventLanguageDemo.next_move arg t.ui_events;
-      if MakeEventLanguageDemo.is_demo_finished arg then t.demo <- `LastSelectedEventMove (EAE.create "Let's add one of the events with more than 200 attending users into the events bin"
-                                                                                             "triangle-obtuse")
+    | [] -> ()
+    | hd :: tl -> begin
+      let () = hd#next_move t.ui_events in
+      if hd#is_demo_finished () then t.demo <- tl
     end
 
-    | `LastSelectedEventMove arg -> begin
-      EAE.next_move arg t.ui_events;
-      if EAE.is_demo_finished arg then t.demo <- `LastButtonMove (MBM.create
-                                                                    "Drag and drop another set of users (here again, if a user is already in the bin he won't be appended twice)"
-                                                                    "triangle-obtuse-other")
-    end
-    | `LastButtonMove arg -> begin
-      MBM.next_move arg t.ui_events;
-      if MBM.is_demo_finished arg then t.demo <- `Done
-    end
-    | `Done -> ()
-
-let stop_demo t = t.demo <- `Done
+let stop_demo t = t.demo <- []
 
 let create ui_events =
   let () = Random.self_init () in
+  let constructors =
+    [(fun x -> (new eae (EAE.create "First choose an event the audience you're looking for might have liked" x) :> 'a demo_move_type));
+     (fun x -> (new mbn (MBN.create "You can drag a group of users and drop it in the users bin" x) :> 'a demo_move_type));
+     (fun x -> (new ere (ERE.create "To compare users relative to different events, you can set a reference event" x) :> 'a demo_move_type));
+     (fun x -> (new mbm (MBM.create "You can choose another group of facebook users (if a user is already in the bin he won't be appended twice)" x) :> 'a demo_move_type));
+     (fun x -> (new event_language_demo (MakeEventLanguageDemo.create "Let's look for events that got at least 200 attending users" x) :> 'a demo_move_type));
+     (fun x -> (new eae (EAE.create "Let's add one of the events with more than 200 attending users into the events bin" x) :> 'a demo_move_type));
+     (fun x -> (new mbm (MBM.create "Drag and drop another set of users (here again, if a user is already in the bin he won't be appended twice)" x) :> 'a demo_move_type))]
+  in
+  let moves = List.fold_left (fun accum x ->
+    let curr_style, res = accum in
+    let new_tyle =
+      if curr_style = "triangle-obtuse" then "triangle-obtuse-other"
+      else "triangle-obtuse"
+    in
+    new_tyle, (x curr_style :: res))
+    ("triangle-obtuse", []) constructors
+  in
+  let _, demo = moves in
   let ui_with_demo =
     {
       ui_events = ui_events;
-      demo = `SelectedEventMove (EAE.create "First choose an event the audience you're looking for might have liked" "triangle-obtuse-other");
+      demo = List.rev demo;
     }
   in
   ignore (Dom_html.window##setInterval(Js.wrap_callback (play_demo ui_with_demo),
