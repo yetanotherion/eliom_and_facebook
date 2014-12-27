@@ -170,8 +170,6 @@ let do_one_move x move =
     | `PaddingTop d -> Html5.Manip.SetCss.paddingTopPx x d
     | `Skip -> ()
 
-let move_done = ref false
-
 let do_move x move =
   Html5.Manip.SetCss.position x "fixed";
   List.iter (fun m -> do_one_move x m) move
