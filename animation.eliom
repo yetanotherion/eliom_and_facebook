@@ -57,6 +57,30 @@ let line_func yO xO yD xD =
   let open ProjectedY in
   fun x -> add (mult_float slope x) origin
 
+let vertical_fire_func x yO yD =
+  let g = 9.91 in
+  let open ProjectedY in
+  (* y = yO + b * t - 1/2 * g * t * t *)
+  (* max in b - g * t = 0 *)
+  (* i.e. b / g = t *)
+  (* we want that the max is in yD *)
+  (* yD = yO + b * b / g - g / 2 * (b / g) * (b / g) *)
+  (* yD = yO + b^2 / g - (b^2 / (g * 2) *)
+  (* yD = yO + b^2 / (g * 2) *)
+  (* b = sqrt ((yD - yO) * (g * 2)) *)
+  let yd_yo = project_in_x (sub yD yO) in
+  let yd_yo = if yd_yo < 0.0 then 0.0 -. yd_yo else yd_yo in
+  let b = 0.0 -. sqrt (yd_yo *. g *. 2.0) in
+  let f t = sub_float (add_float yO (b *. t)) ((g /. 2.0) *. t *. t) in
+  (* 0 = t * (b - g * t / 2*)
+  let t_end = 2.0 *. b /. g in
+  let number_points = 100.0 in
+  let t_range = List.map
+    (fun x -> (float_of_int x) *. t_end /. number_points)
+    (range 0 (int_of_float number_points))
+  in
+  List.map (fun t -> x, f t) t_range
+
 let parabolic_func_param ?coeff:(c=0.1) yO xO yD xD =
   (* move from O to D *)
   (* y = a * x * x + b * x + c *)
@@ -174,10 +198,15 @@ let do_move x move =
   Html5.Manip.SetCss.position x "fixed";
   List.iter (fun m -> do_one_move x m) move
 
+let translate_coordinates_to_move l =
+  List.map (fun (x, y) -> let y = int_of_float (ProjectedY.to_float y) in
+                          [`Left x; `Top y]) l
+
 let compute_move ?step:(s=20) sx dx f =
   let range_of_x = compute_x_range ~step:s sx dx in
-  List.map (fun x -> let y = int_of_float (ProjectedY.to_float (f (float_of_int x))) in
-                     [`Left x; `Top y]) range_of_x
+  translate_coordinates_to_move (List.map
+                                   (fun x -> x, f (float_of_int x))
+                                   range_of_x)
 
 type point = {
   x: float;

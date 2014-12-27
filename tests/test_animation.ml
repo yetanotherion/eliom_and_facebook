@@ -2,13 +2,6 @@
    ocaml -I ../_server test_animation.ml
    to run it *)
 
-let range ?step:(s=1) start_idx end_idx =
-  let rec _range cidx eidx accum =
-    if cidx + s >= eidx then List.rev (eidx :: accum)
-    else _range (cidx + s) eidx (cidx :: accum)
-  in
-  _range start_idx end_idx []
-
 module ProjectedY : sig
   type t
   val of_float: float -> t
@@ -42,6 +35,13 @@ end = struct
   let mult_float = mult
   let div_float = div
 end
+
+let range ?step:(s=1) start_idx end_idx =
+  let rec _range cidx eidx accum =
+    if cidx + s >= eidx then List.rev (cidx :: accum)
+    else _range (cidx + s) eidx (cidx :: accum)
+  in
+  _range start_idx end_idx []
 
 let rec compute_x_range ?step:(s=20) sx dx =
   let to_int x = int_of_float x in
@@ -103,6 +103,32 @@ let parabolic_func_param ?coeff:(c=0.1) yO xO yD xD =
   let b = float_sub 0.0 (mult_float a (2.0 *.maxX)) in
   let c = sub yO (add (mult_float b xO) (mult_float a (xO *. xO))) in
   a, b, c
+
+let vertical_fire_func x yO yD =
+  let g = 9.91 in
+  let open ProjectedY in
+  (* y = yO + b * t - 1/2 * g * t * t *)
+  (* max in b - g * t = 0 *)
+  (* i.e. b / g = t *)
+  (*we want that the max is in yD *)
+  (* yD = yO + b * b / g - g / 2 * (b / g) * (b / g) *)
+  (* yD = yO + b^2 / g - (b^2 / (g * 2) *)
+  (* yD = yO + b^2 / (g * 2) *)
+  (* b = sqrt ((yD - yO) * (g * 2)) *)
+  let yd_yo = project_in_x (sub yD yO) in
+  let yd_yo = if yd_yo < 0.0 then 0.0 -. yd_yo else yd_yo in
+  let b = 0.0 -. sqrt (yd_yo *. g *. 2.0) in
+  Printf.printf "b: %f\n" b;
+  let f t = sub_float (add_float yO (b *. t)) ((g /. 2.0) *. t *. t) in
+  (* 0 = t * (b - g * t / 2*)
+  let t_end = 2.0 *. b /. g in
+  Printf.printf "t_end: %f, f(0): %s, f(b/g): %s, f(t_end): %s, yO: %s yD: %s\n" t_end (to_string (f 0.0)) (to_string (f  (b /. g))) (to_string (f t_end)) (to_string yO) (to_string yD);
+  let number_points = 100.0 in
+  let t_range = List.map
+    (fun x -> (float_of_int x) *. t_end /. number_points)
+    (range 0 (int_of_float number_points))
+  in
+  List.map (fun t -> x, f t) t_range
 
 let parabolic_func ?coeff:(c=0.1) yO xO yD xD =
   let open ProjectedY in
@@ -180,16 +206,25 @@ let make_gnuplot_script gnuplot_f data_f =
            ps "plot '%s' using 1:2" data_f] in
   write_lines gnuplot_f r
 
-let make_f_test f name =
+let write_graph name xy =
   let ps = Printf.sprintf in
-  let (yD, xD) = (ProjectedY.of_float 40.0, 400.0) in
-  let (yO, xO) = (ProjectedY.of_float 40.0, 1500.0)  in
-  let f = f yO xO yD xD in
-  let r = List.map (fun x -> float_of_int x) (compute_x_range xO xD) in
-  let () = write_lines (ps "%s.dat" name) (List.map (fun x -> Printf.sprintf "%f %s" x (ProjectedY.to_string (f x))) r) in
+  let () = write_lines (ps "%s.dat" name) (List.map (fun p ->
+    let x, y = p in
+    Printf.sprintf "%f %s" x (ProjectedY.to_string y)) xy) in
   let () = make_gnuplot_script (ps "%s.gplt" name) (ps "%s.dat" name) in
   let _ = Sys.command (ps "gnuplot < %s.gplt > %s.ps" name name) in
   let _ = Sys.command (ps "open %s.ps" name) in
+  ()
+
+let make_f_test ?dest:(d=(40.0, 400.0)) ?orig:(o=(40.0, 1500.0)) f name  =
+  let (yD, xD) = d in
+  let (yO, xO) = o in
+  let yD = ProjectedY.of_float yD in
+  let yO = ProjectedY.of_float yO in
+  let f = f yO xO yD xD in
+  let r = List.map (fun x -> float_of_int x) (compute_x_range xO xD) in
+  let xy = List.map (fun x -> x, f x) r in
+  write_graph name xy;
   ();;
 
 let make_test2 () =
@@ -202,8 +237,13 @@ let make_test3 () =
 let make_test4 () =
   make_f_test basketball_func "basketball";;
 
+let make_test5 () =
+  let f = vertical_fire_func 40.0 (ProjectedY.of_float 400.0) (ProjectedY.of_float 40.0) in
+  write_graph "vertical_jump" f;
+  ();;
 
-make_test1 ();;
+(*make_test1 ();;
 make_test2 ();;
 make_test3 ();;
-make_test4 ();;
+make_test4 ();;*)
+make_test5 ();;
