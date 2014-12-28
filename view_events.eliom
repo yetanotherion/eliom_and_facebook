@@ -2,7 +2,7 @@
 open Eliom_content
 open Html5.D
 
-type 'a dom_type = 'a constraint [>`Img | `PCDATA] = 'a
+type 'a dom_type = 'a constraint [>`Div | `Img | `PCDATA] = 'a
 type 'a one_move = ('a dom_type elt * Animation.move list list)
 
 type 'a move_state =
@@ -177,7 +177,7 @@ struct
         let move = match M.do_middle with
           | false -> Animation.compute_funny_move source dest
           | true -> begin
-            let mtop, mleft, mright, _ = Utils.getBoundingClientRectCoordinates t.Ui_events.legend_div in
+            let mtop, mleft, mright, _ = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element t.Ui_events.legend_div) in
             Animation.compute_rebound_on_middle_move source dest mleft mright mtop
           end
         in
@@ -350,6 +350,109 @@ object
   method is_demo_finished () = ERE.is_demo_finished arg
 end
 
+class ['a] eab init =
+object (self)
+  val initial_style = init
+  val mutable state = `NotStarted
+
+  method filter_buttons filter_bt filter_reltype l =
+    List.filter (fun x -> let bt, relative_type = x.Ui_events.displayed_information in
+                          if filter_bt bt then filter_reltype relative_type
+                          else false) l
+  method compute_move fbt frbt (t:'a dom_type Ui_events.ui_events): ('a dom_type Ui_events.one_button_to_move * Animation.move list list * ('a dom_type elt * Animation.move list list) list) =
+    let open Ui_events in
+    let buttons_to_pick = self#filter_buttons fbt frbt t.buttons_to_move in
+    let () = assert (List.length buttons_to_pick > 0) in
+    let random_idx = Random.int (List.length buttons_to_pick) in
+    let nth = List.nth buttons_to_pick random_idx in
+    let button_elt = nth.button_elt in
+    let elt_on_the_right = nth.elt_on_the_right in
+    let hidde_elt elt =
+      let () = Utils.show_element (Html5.To_dom.of_element elt) in
+      Utils.set_element_as_transparent ( elt)
+    in
+    let legend_elements = List.filter (fun x -> frbt x.legend_button_type) t.legend_buttons_to_move in
+    let legend_buttons = List.map (fun x -> x.legend_button) legend_elements in
+    let button_to_hidde = List.map (fun x -> x.legend_elt_on_the_right) legend_elements in
+    let () = List.iter hidde_elt (elt_on_the_right :: button_to_hidde) in
+    let compute_vertical_move b =
+      let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element b) in
+      let point = Animation.create_point curr_left curr_top in
+      Animation.compute_vertical_move point
+    in
+    (nth, compute_vertical_move button_elt, List.map (fun x -> x, compute_vertical_move x) legend_buttons)
+
+  method compute_all_moves (t:'a dom_type Ui_events.ui_events) =
+    List.map (fun x ->
+      let msg, f1, f2 = x in
+      `Init (msg, fun () -> self#compute_move f1 f2 t))
+      [("These are the people that attended to the selected event and that attended to the reference event too", (fun x -> x = `Attending), (fun x -> x = `RelAttending));
+       ("Those are the ones that attended to the selected event and that declined the reference event's invitation", (fun x -> x = `Attending), (fun x -> x = `RelDeclined));
+       ("Those are the ones that declined the selected event's invitation, but that were not invited to the reference event", (fun x -> x = `Declined), (fun x -> x = `RelNotInvited));
+       ("Those are the ones that were invited to the selected event, and that were invited to the reference event too", (fun x -> x = `Invited), (fun x -> x = `RelInvited))]
+
+
+  method next_move (t:'a dom_type Ui_events.ui_events) =
+    match state with
+      | `NotStarted -> begin
+        Ui_events.set_demo_text t (Some ("Let's take some time to explain the new group of users that appeared", initial_style));
+        state <- `WaitForFirstMsgRead 0
+      end
+      | `WaitForFirstMsgRead x -> begin
+        if x = 50 then state <- `Moving (self#compute_all_moves t)
+        else state <- `WaitForFirstMsgRead (x + 1)
+      end
+      | `Moving l -> begin
+        match l with
+          | hd :: tl -> begin
+            match hd with
+              | `Init (msg, f) -> begin
+                Ui_events.set_demo_text t (Some (msg, initial_style));
+                let elt, move_l, legend_moves = f () in
+                state <- `Moving (`DoMove (elt, move_l, legend_moves) :: tl)
+              end
+              | `DoMove (elt_to_move, move_l, legend_moves) -> begin
+                match move_l with
+                  | [] -> begin
+                    Ui_events.refresh_compared_buttons_only t elt_to_move;
+                    Ui_events.display_legend_div ~force:true t;
+                    state <- `Moving tl
+                  end
+                  | curr_move :: other_move -> begin
+                    Animation.do_move elt_to_move.Ui_events.button_elt curr_move;
+                    let legend_moves = List.map (fun (x, l) ->
+                      let hd, tl = List.hd l, List.tl l in
+                      let () = Animation.do_move x hd in
+                      x, tl) legend_moves in
+                    state <- `Moving ((`DoMove (elt_to_move, other_move, legend_moves)) :: tl)
+                  end
+              end
+          end
+          | [] -> begin
+            let curr_top, curr_left, _, _ = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element t.Ui_events.div_in_legend_div) in
+            let point = Animation.create_point curr_left curr_top in
+            Ui_events.set_demo_text t (Some ("Do you get the idea ? If you forgot the meaning of different user sets, don't worry, the legend is here to help you", initial_style));
+            state <- `Last (Animation.compute_vertical_move point)
+          end
+      end
+      | `Last l -> begin
+        match l with
+          | [] -> begin
+            Ui_events.display_legend_div ~force:true t;
+            state <- `Stop
+          end
+          | hd :: tl -> begin
+            Animation.do_move t.Ui_events.div_in_legend_div hd;
+            state <- `Last tl
+          end
+      end
+      | `Stop -> ()
+
+  method is_demo_finished () =
+    match state with
+      | `Stop -> true
+      | _  -> false
+end
 
 class ['a] mbn init =
 object
@@ -387,6 +490,7 @@ let create ui_events =
      (fun x -> (new mbn (MBN.create "You can drag a group of users and drop it in the users bin" x) :> 'a demo_move_type));
      (fun x -> (new ere (ERE.create "To compare users relative to different events, you can set a reference event" x) :> 'a demo_move_type));
      (fun x -> (new mbm (MBM.create "You can choose another group of facebook users (if a user is already in the bin he won't be appended twice)" x) :> 'a demo_move_type));
+     (fun x -> ((new eab x) :> 'a demo_move_type));
      (fun x -> (new event_language_demo (MakeEventLanguageDemo.create "Let's look for events that got at least 200 attending users" x) :> 'a demo_move_type));
      (fun x -> (new eae (EAE.create "Let's add one of the events with more than 200 attending users into the events bin" x) :> 'a demo_move_type));
      (fun x -> (new mbm (MBM.create "Drag and drop another set of users (here again, if a user is already in the bin he won't be appended twice)" x) :> 'a demo_move_type))]

@@ -9,6 +9,8 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
   open Html5.D
   open Eliom_parameter
 
+  let flatten l = List.fold_left List.append [] l
+
   let user_type_to_icon_file x =
     match x with
       | `All -> "users.png"
@@ -18,33 +20,11 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
       | `Invited_ref -> "events_ref_invited.png"
       | `Not_invited_ref -> "events_ref_not_invited.png"
 
-
-  let users_inequation =
-    let make_icon u=
-      let s = 16 in
-      img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file u))) ~alt:"users" ~a:[a_height s; a_width s] ()
-    in
-    let overall_inequation =
-    [make_icon `All_events;
-     pcdata " != ";
-     make_icon `Attended_ref;
-     pcdata " + ";
-     make_icon `Declined_ref;
-     pcdata " + ";
-     make_icon `Invited_ref;
-     pcdata " + ";
-     make_icon `Not_invited_ref;
-     pcdata ", but"
-    ] in
-    let overall_equation =
-      [make_icon `All_events;
-       pcdata " = ";
-       make_icon `Invited_ref;
-       pcdata " + ";
-       make_icon `Not_invited_ref]
-    in
-    let list_of_equations = List.rev (List.fold_left (fun a b -> (li b) :: a) [] [overall_inequation; overall_equation]) in
-    [ul list_of_equations]
+  let create_img_and_hidden_copy user_type attributes =
+    let icon = img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file user_type))) ~alt:"users" ~a:attributes () in
+    let nattributes =  (a_class ["hidden"]) :: attributes in
+    let icon_copy = img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file user_type))) ~alt:"users" ~a:nattributes () in
+    icon, icon_copy
 
   let make_icon_and_text ?usert:(u=`All) ?userid:(uid=None) ?draggable:(d=true) ?size:(s=16) text =
     let attributes = [a_height s; a_width s;
@@ -53,11 +33,13 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
       | None -> attributes
       | Some x -> (a_id (Printf.sprintf "%d" x)) :: attributes
     in
-    let icon = img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file u))) ~alt:"users" ~a:attributes () in
-    (icon, pcdata text)
+    let icon, icon2 = create_img_and_hidden_copy u attributes in
+    let nattributes =  (a_class ["hidden"]) :: attributes in
+    let icon2 = img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file u))) ~alt:"users" ~a:nattributes () in
+    (icon, pcdata text, icon2)
 
   let make_users_in_div ?usert:(u=`All) ?userid:(uid=None) ?draggable:(d=true) ?size:(s=16) text =
-    let icon, text = make_icon_and_text ~usert:u ~userid:uid ~draggable:d ~size:s text in
+    let icon, text, _ = make_icon_and_text ~usert:u ~userid:uid ~draggable:d ~size:s text in
     [icon; text]
 
   let make_users_basket_in_div number_of_users =
@@ -157,7 +139,14 @@ type relative_type = [`RelInvited | `RelNotInvited | `RelDeclined | `RelAttendin
 type 'a one_button_to_move =  {
   button_elt: 'a Eliom_content.Html5.elt;
   related_event_id: string;
-  displayed_information: attended_type * relative_type
+  displayed_information: attended_type * relative_type;
+  elt_on_the_right: 'a Eliom_content.Html5.elt;
+}
+
+type 'a one_legend_button_move = {
+  legend_button: 'a Eliom_content.Html5.elt;
+  legend_button_type: relative_type;
+  legend_elt_on_the_right: 'a Eliom_content.Html5.elt;
 }
 
 type 'a ui_events = {
@@ -176,16 +165,101 @@ type 'a ui_events = {
   selected_events_div_container: Dom_html.element Js.t;
   selected_events_div: 'a Eliom_content.Html5.elt;
   selected_events_table: Dom_html.element Js.t;
-  legend_div: Dom_html.element Js.t;
+  legend_div: 'a Eliom_content.Html5.elt;
+  mutable div_in_legend_div: 'a Eliom_content.Html5.elt;
+  mutable legend_displayed: bool;
   mutable ref_event: reference_event;
   mutable user_sets: user_sets;
   mutable curr_offset: Int32.t;
   mutable curr_query: string option;
   mutable buttons_to_move: 'a one_button_to_move list;
+  mutable legend_buttons_to_move: 'a one_legend_button_move list;
   mutable all_users_container: Utils.RsvpSet.t;
   demo_text_span: 'a Eliom_content.Html5.elt;
   example_queries: Dom_html.element Js.t;
 }
+
+let append_legend_button_move_from_icon_type icon icon_copy icon_type all_buttons =
+  let to_append = match icon_type with
+      | `All_events | `All -> []
+      | `Attended_ref -> [{legend_button=icon;
+                           legend_button_type=`RelAttending;
+                           legend_elt_on_the_right=icon_copy}]
+      | `Declined_ref -> [{legend_button=icon;
+                           legend_button_type=`RelDeclined;
+                           legend_elt_on_the_right=icon_copy}]
+      | `Invited_ref -> [{legend_button=icon;
+                          legend_button_type=`RelInvited;
+                          legend_elt_on_the_right=icon_copy
+                         }]
+      | `Not_invited_ref -> [{legend_button=icon;
+                              legend_button_type=`RelNotInvited;
+                              legend_elt_on_the_right=icon_copy
+                             }]
+  in
+  all_buttons := List.append !all_buttons to_append
+
+let make_users_inequation all_buttons =
+  let make_icon u =
+    let s = 16 in
+    let icon, icon2 = create_img_and_hidden_copy u [a_height s; a_width s] in
+    append_legend_button_move_from_icon_type icon icon2 u all_buttons;
+    [icon; icon2]
+  in
+  let flatten l = List.fold_left (fun accum res -> List.append accum res) [] l in
+  let overall_inequation =
+    flatten [make_icon `All_events;
+             [pcdata " != "];
+             make_icon `Attended_ref;
+             [pcdata " + "];
+             make_icon `Declined_ref;
+             [pcdata " + "];
+             make_icon `Invited_ref;
+             [pcdata " + "];
+             make_icon `Not_invited_ref;
+             [pcdata ", but"]]
+  in
+  let overall_equation =
+    flatten [make_icon `All_events;
+             [pcdata " = "];
+             make_icon `Invited_ref;
+             [pcdata " + "];
+             make_icon `Not_invited_ref]
+  in
+  let list_of_equations = List.rev (List.fold_left (fun a b -> (li b) :: a) [] [overall_inequation; overall_equation]) in
+  [ul list_of_equations]
+
+let create_div_map l f all_buttons =
+  List.map (fun (x, text) -> f (
+    let icon, text, copy = make_icon_and_text ~usert:x ~draggable:false ~size:20 text in
+    append_legend_button_move_from_icon_type icon copy x all_buttons;
+    [icon; copy; text])) l
+
+
+let display_legend_div ?force:(f=false) t =
+  if not f && t.legend_displayed then ()
+  else
+    let all_buttons = ref [] in
+    let legend_info = [(`Attended_ref,
+                        " attended to the reference event,");
+                       (`Declined_ref,
+                        " declined the reference event's invitation,");
+                       (`Invited_ref,
+                        " got invited to the reference event,");
+                       (`Not_invited_ref,
+                        " were not invited to the reference event.")] in
+    let in_legend_div =  flatten
+      [create_div_map [(`All_events,
+                        " Facebook users that attended, declined or were invited to the event. Among these users we have the ones that:")] div all_buttons;
+       [ul (create_div_map legend_info li all_buttons)];
+       [div [pcdata "To understand more about these sets, note that :"]];
+       [div (make_users_inequation all_buttons)]]
+    in
+    let div_in_legend_div = div in_legend_div in
+    let () = Html5.Manip.replaceChildren t.legend_div [div_in_legend_div] in
+    t.div_in_legend_div <- div_in_legend_div;
+    t.legend_displayed <- true;
+    t.legend_buttons_to_move <- !all_buttons
 
 let create
     url_input
@@ -210,20 +284,23 @@ let create
     selected_events_div_container = Html5.To_dom.of_element selected_events_div;
     selected_events_div = selected_events_div;
     selected_events_table = Html5.To_dom.of_element selected_events_table;
-    legend_div = Html5.To_dom.of_element legend_div;
+    legend_div = legend_div;
+    div_in_legend_div = div [];
+    legend_displayed = false;
     ref_event = `Undefined;
     user_sets = create_user_sets ();
     curr_offset = 0l;
     curr_query = None;
     buttons_to_move = [];
+    legend_buttons_to_move = [];
     all_users_container = Utils.RsvpSet.empty;
     demo_text_span = demo_text_span;
     example_queries = Html5.To_dom.of_element example_queries;
   }
 
 let make_user_button t user utype text =
-  let button, text = make_icon_and_text ~usert:utype ~userid:(Some user.user_id) text in
-  let res = div [button; text] in
+  let button, text, copy = make_icon_and_text ~usert:utype ~userid:(Some user.user_id) text in
+  let res = div [button; copy; text] in
   let res_dom = Html5.To_dom.of_element res in
   let open Lwt_js_events in
   let ondragstarts ev _ =
@@ -232,7 +309,7 @@ let make_user_button t user utype text =
     Lwt.return_unit
   in
   Lwt.async (fun () -> dragstarts res_dom ondragstarts);
-  res, button
+  res, button, text, copy
 
 let display_compared_rsvp t event compared_users compared_span =
   (*let () = check_event_coherence event in*)
@@ -243,31 +320,30 @@ let display_compared_rsvp t event compared_users compared_span =
   let user_sets, common_invited = append_new_user_set user_sets (common_users event.Utils.invited compared_users) in
   let not_invited_users = Utils.RsvpSet.diff compared_users_set common_invited.users in
   let user_sets, not_invited = append_new_user_set user_sets not_invited_users in
-  let buttons = List.map (fun (u, x, y, z) -> let div, button = make_user_button t u x y in
-                                              div, (button, z)) [(compared_user, `All_events,
-                                                                  Printf.sprintf "%d" (List.length compared_users), `AllCurrEvent);
-                                                                 (common_attending, `Attended_ref,
-                                                                  Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_attending.users), `RelAttending);
-                                                                 (common_declined, `Declined_ref ,
-                                                                  Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_declined.users), `RelDeclined);
-                                                                 (common_invited, `Invited_ref,
-                                                                  Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_invited.users), `RelInvited);
-                                                                 (not_invited, `Not_invited_ref,
-                                                                  Printf.sprintf "%d" (Utils.RsvpSet.cardinal not_invited.users), `RelNotInvited)]
+  let map_arg = [(compared_user, `All_events,
+                  Printf.sprintf "%d" (List.length compared_users), `AllCurrEvent);
+                 (common_attending, `Attended_ref,
+                  Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_attending.users), `RelAttending);
+                 (common_declined, `Declined_ref ,
+                  Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_declined.users), `RelDeclined);
+                 (common_invited, `Invited_ref,
+                  Printf.sprintf "%d" (Utils.RsvpSet.cardinal common_invited.users), `RelInvited);
+                 (not_invited, `Not_invited_ref,
+                  Printf.sprintf "%d" (Utils.RsvpSet.cardinal not_invited.users), `RelNotInvited)]
+  in
+  let buttons = List.map (fun (u, x, y, rel_button_type) -> let div, button, text, copy = make_user_button t u x y in
+                                                            div, (button, rel_button_type, text, copy)) map_arg
   in
   Html5.Manip.replaceChildren compared_span (List.map Pervasives.fst buttons);
   t.user_sets <- user_sets;
   List.map Pervasives.snd buttons
 
 let display_rsvp t users span =
-  (*let () = check_event_coherence event in*)
   let user_sets, displayed_users = append_new_user_set t.user_sets (Utils.make_rsvp_set users) in
-  let under_span, button = make_user_button
-                               t displayed_users `All_events
-                               (Printf.sprintf "%d" (List.length users)) in
+  let under_span, button, text, copy = make_user_button t displayed_users `All_events (Printf.sprintf "%d" (List.length users)) in
   Html5.Manip.replaceChildren span [under_span];
   t.user_sets <- user_sets;
-  button
+  button, text, copy
 
 let process_event t event spans user_ref =
  try_lwt
@@ -303,22 +379,49 @@ let resolve_event t event spans =
  let () = Events_store.add t.resolved_events_cache event.Utils.url resolved_event in
  Lwt.return_unit
 
-let flatten l = List.fold_left List.append [] l
-let display_event ?ref_event:(r=None) t event span =
+let display_event ?ref_event:(r=None) ?filter_attending_type:(f_attending=fun _ -> true) t event span =
   let f arg =
-    let u, s, dt = arg in
+    let u, s, rsvp_info_type = arg in
     match r with
-    | None -> [{button_elt = display_rsvp t u s;
-                related_event_id = event.Utils.ev_url;
-                displayed_information = (dt, `AllCurrEvent)}]
-    | Some ref_event -> List.map (fun x -> let b, bt = x in
+    | None ->
+      let button, text, copy = display_rsvp t u s in
+      [{button_elt = button;
+        related_event_id = event.Utils.ev_url;
+        displayed_information = (rsvp_info_type, `AllCurrEvent);
+        elt_on_the_right = copy;}]
+    | Some ref_event -> List.map (fun x -> let b, compared_rsvp_into_type, text, copy = x in
                                            {button_elt = b;
                                             related_event_id = event.Utils.ev_url;
-                                            displayed_information = (dt, bt)}) (display_compared_rsvp t ref_event u s)
+                                            displayed_information = (rsvp_info_type, compared_rsvp_into_type);
+                                            elt_on_the_right = copy;
+                                           }) (display_compared_rsvp t ref_event u s)
   in
-  flatten (List.map f [(event.Utils.attending, span.Utils.attending_span, `Attending);
-                       (event.Utils.declined, span.Utils.declined_span, `Declined);
-                       (event.Utils.invited, span.Utils.invited_span, `Invited)])
+  flatten (List.map f (List.filter f_attending [(event.Utils.attending, span.Utils.attending_span, `Attending);
+                                                (event.Utils.declined, span.Utils.declined_span, `Declined);
+                                                (event.Utils.invited, span.Utils.invited_span, `Invited)]))
+
+let refresh_compared_buttons_only t button_param =
+  let event_url = button_param.related_event_id in
+  let button_type, _ = button_param.displayed_information in
+  let filter_bt b_elt =
+    let _, _, b_elt_button_type = b_elt in
+    b_elt_button_type = button_type
+  in
+  let curr_event, spans = Events_store.find t.selected_events event_url in
+  let curr_event = match curr_event with
+    | `Resolving _ -> assert(false)
+    | `Resolved curr_event -> curr_event in
+  let ref_event = match t.ref_event with
+    | `Undefined | `Resolving (_, _) -> assert(false)
+    | `Resolved (ref_event, _) -> ref_event
+  in
+  let buttons = display_event ~filter_attending_type:filter_bt ~ref_event:(Some ref_event) t curr_event spans in
+  t.buttons_to_move <- List.append (List.filter (fun x ->
+    let related_event = x.related_event_id = event_url in
+    let rsvp_info_type, bt = x.displayed_information in
+    not (related_event && rsvp_info_type = button_type)) t.buttons_to_move) buttons
+
+
 let refresh_ui t =
  let resolved_events = ref [] in
  let () = Events_store.iter (fun k (event, spans) ->
@@ -338,7 +441,7 @@ let refresh_ui t =
    | `Resolved (ref_event, ref_span) -> begin
      let ref_buttons = display_event t ref_event ref_span in
      let all_other_buttons = flatten (List.map (fun (curr_event, span) ->
-                                      display_event ~ref_event:(Some ref_event) t curr_event span)
+                                                display_event ~ref_event:(Some ref_event) t curr_event span)
                                       !resolved_events) in
      (List.append ref_buttons all_other_buttons, true)
    end
@@ -346,7 +449,7 @@ let refresh_ui t =
  t.buttons_to_move <- buttons;
  Utils.show_element t.all_users_div;
  if List.length !resolved_events > 0 && ref_event_resolved then (
-   Utils.show_element t.legend_div)
+   display_legend_div t)
 
 let make_rpc_get_events_args ?offset:(o=0l) t queryo = (queryo, t.nb_event_per_request, o)
 

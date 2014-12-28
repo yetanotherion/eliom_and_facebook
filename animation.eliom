@@ -74,12 +74,12 @@ let vertical_fire_func x yO yD =
   let f t = sub_float (add_float yO (b *. t)) ((g /. 2.0) *. t *. t) in
   (* 0 = t * (b - g * t / 2*)
   let t_end = 2.0 *. b /. g in
-  let number_points = 100.0 in
+  let number_points = 25.0 in
   let t_range = List.map
     (fun x -> (float_of_int x) *. t_end /. number_points)
     (range 0 (int_of_float number_points))
   in
-  List.map (fun t -> x, f t) t_range
+  List.map (fun t -> (int_of_float x), f t) t_range
 
 let parabolic_func_param ?coeff:(c=0.1) yO xO yD xD =
   (* move from O to D *)
@@ -207,7 +207,6 @@ let compute_move ?step:(s=20) sx dx f =
   translate_coordinates_to_move (List.map
                                    (fun x -> x, f (float_of_int x))
                                    range_of_x)
-
 type point = {
   x: float;
   y: float;
@@ -222,6 +221,16 @@ let compute_line_move source dest =
   let open ProjectedY in
   let yO, yD = of_float source.y, of_float dest.y in
   compute_move source.x dest.x (line_func yO source.x yD dest.x)
+
+let compute_vertical_move point =
+  let open ProjectedY in
+  let x = point.x in
+  let y = of_float point.y in
+  let ydest = add_float y 100.0 in
+  let r = translate_coordinates_to_move (vertical_fire_func x y ydest) in
+  List.fold_left (fun res _ ->
+    res @ r) [] (range 0 10)
+
 
 let compute_funny_move source dest =
   let open ProjectedY in
@@ -269,8 +278,7 @@ let compute_rebound_on_middle_move source dest mleft mright mtop =
     let xD, yD = b in
     let (xO, yO), previous_moves = a in
     let curr_move =
-      (* slow down the move *)
-      try compute_basketball_move ~step:15 yO xO yD xD
+      try compute_basketball_move yO xO yD xD
       with (Failure _) -> (
         Utils.log (Printf.sprintf "failure xO: %f xD:%f" xO xD);
         [])

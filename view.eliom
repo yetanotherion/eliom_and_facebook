@@ -27,25 +27,7 @@ let view_service unused unused2 =
   let reference_event_div_container = div ~a:[a_class ["container"]] [reference_event_div] in
   let demo_text_span = span [] in
   let all_users_div = div ~a:[a_class ["hidden"]] (Ui_events.make_users_basket_in_div 0) in
-  let legend_info = [(`Attended_ref,
-                      " attended to the reference event,");
-                     (`Declined_ref,
-                      " declined the reference event's invitation,");
-                     (`Invited_ref,
-                      " got invited to the reference event,");
-                     (`Not_invited_ref,
-                      " were not invited to the reference event.")] in
-  let create_div_map l f =
-    List.map (fun (x, text) -> f (Ui_events.make_users_in_div ~usert:x ~draggable:false ~size:20 text)) l
-  in
-  let in_legend_div =  List.fold_left List.append []
-    [create_div_map [(`All_events,
-                      " Facebook users that attended, declined or were invited to the event. Among these users we have the ones that:")] div;
-     [ul (create_div_map legend_info li)];
-     [div [pcdata "To understand more about these sets, note that :"]];
-     [div Ui_events.users_inequation]]
-  in
-  let legend_div = div ~a:[a_class ["hidden"]] in_legend_div in
+  let legend_div = div [] in
   let user_select_ui_div =  div ~a:[a_class ["span9"]] [all_users_div;
                                                         selected_events_div_container;
                                                         reference_event_div_container;

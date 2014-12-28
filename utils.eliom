@@ -2,6 +2,7 @@
   open Eliom_content
   open Html5.D
   open Eliom_parameter
+
   type event = {
     url: string;
     location: string;
@@ -68,6 +69,17 @@ let bootstrap_metas = [utf8_meta;
                                  a_content "IE=edge"] ()]
 
 {client{
+
+  let hidde_element elt =
+    if not (Js.to_bool (elt##classList##contains(Js.string "hidden")))
+    then elt##classList##add(Js.string "hidden")
+
+  let show_element elt =
+    if (Js.to_bool (elt##classList##contains(Js.string "hidden")))
+    then elt##classList##remove(Js.string "hidden")
+
+  let set_element_as_transparent elt = Html5.Manip.SetCss.opacity elt (Some "0.0")
+
   let get_element_id element =
     Js.to_string (Js.Opt.get (element##getAttribute (Js.string "id")) (fun () -> assert false))
 
@@ -211,14 +223,6 @@ function getOffsetRect(elem) {
                td [pcdata (epoch_to_light_date (to_epoch event.Fb.start_time))]]
               @ (List.map (fun x -> td [x]) wait_msg_spans) in
     tr tds
-
-  let hidde_element elt =
-    if not (Js.to_bool (elt##classList##contains(Js.string "hidden")))
-    then elt##classList##add(Js.string "hidden")
-
-  let show_element elt =
-    if (Js.to_bool (elt##classList##contains(Js.string "hidden")))
-    then elt##classList##remove(Js.string "hidden")
 
   let substring_after_char string c =
     let next_char_idx = (String.index string c) + 1 in
