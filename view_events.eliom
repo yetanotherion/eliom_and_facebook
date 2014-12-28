@@ -169,8 +169,9 @@ struct
       | _ -> begin
         let random_idx = Random.int (List.length t.buttons_to_move) in
         let hd = List.nth t.buttons_to_move random_idx in
+        let button_elt = hd.Ui_events.button_elt in
         let top, left, right, bottom = Utils.getBoundingClientRectCoordinates t.all_users_div in
-        let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element hd) in
+        let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element button_elt) in
         let source = Animation.create_point curr_left curr_top in
         let dest = Animation.create_point left top in
         let move = match M.do_middle with
@@ -180,7 +181,7 @@ struct
             Animation.compute_rebound_on_middle_move source dest mleft mright mtop
           end
         in
-        Some (hd, move)
+        Some (button_elt, move)
       end
 
   let handle_move_end t () x =
