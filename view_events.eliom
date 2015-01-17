@@ -2,6 +2,11 @@
 open Eliom_content
 open Html5.D
 
+
+let hidde_elt elt =
+  let () = Utils.show_element (Html5.To_dom.of_element elt) in
+  Utils.set_element_as_transparent elt
+
 type 'a dom_type = 'a constraint [>`Div | `Img | `PCDATA] = 'a
 type 'a one_move = ('a dom_type elt * Animation.move list list)
 
@@ -170,6 +175,7 @@ struct
         let random_idx = Random.int (List.length t.buttons_to_move) in
         let hd = List.nth t.buttons_to_move random_idx in
         let button_elt = hd.Ui_events.button_elt in
+        let () = hidde_elt hd.Ui_events.elt_on_the_right in
         let top, left, right, bottom = Utils.getBoundingClientRectCoordinates t.all_users_div in
         let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element button_elt) in
         let source = Animation.create_point curr_left curr_top in
@@ -319,7 +325,7 @@ end
 module ButtonsMoveNoMiddle = ButtonsMove (struct let do_middle = false end)
 module ButtonsMoveMiddle = ButtonsMove (struct let do_middle = true end)
 module MBN = MakeMove (ButtonsMoveNoMiddle)
-module MBM = MakeMove (ButtonsMoveMiddle)
+module MBM = MakeMove (ButtonsMoveNoMiddle)
 module EAE = MakeMove(EventsToAdditionalEvents(SelectAdditionalEvents) (struct let start_wait = 100 let end_wait = 0 end))
 module ERE = MakeMove(EventsToAdditionalEvents(SelectReferenceEvent) (struct let start_wait = 30 let end_wait = 0 end))
 
@@ -366,15 +372,10 @@ object (self)
     let random_idx = Random.int (List.length buttons_to_pick) in
     let nth = List.nth buttons_to_pick random_idx in
     let button_elt = nth.button_elt in
-    let elt_on_the_right = nth.elt_on_the_right in
-    let hidde_elt elt =
-      let () = Utils.show_element (Html5.To_dom.of_element elt) in
-      Utils.set_element_as_transparent ( elt)
-    in
     let legend_elements = List.filter (fun x -> frbt x.legend_button_type) t.legend_buttons_to_move in
     let legend_buttons = List.map (fun x -> x.legend_button) legend_elements in
     let button_to_hidde = List.map (fun x -> x.legend_elt_on_the_right) legend_elements in
-    let () = List.iter hidde_elt (elt_on_the_right :: button_to_hidde) in
+    let () = List.iter hidde_elt (nth.elt_on_the_right :: button_to_hidde) in
     let compute_vertical_move b =
       let curr_top, curr_left, curr_right, curr_bottom = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element b) in
       let point = Animation.create_point curr_left curr_top in

@@ -38,16 +38,13 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
     let icon2 = img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file u))) ~alt:"users" ~a:nattributes () in
     (icon, pcdata text, icon2)
 
-  let make_users_in_div ?usert:(u=`All) ?userid:(uid=None) ?draggable:(d=true) ?size:(s=16) text =
-    let icon, text, _ = make_icon_and_text ~usert:u ~userid:uid ~draggable:d ~size:s text in
-    [icon; text]
-
   let make_users_basket_in_div number_of_users =
     let text =
       if number_of_users == 0 then "Users bin"
       else Printf.sprintf "%d users in the bin" number_of_users
     in
-    make_users_in_div text ~draggable:false ~size:42
+    let icon, text, _ = make_icon_and_text ~draggable:false ~size:42 text in
+    [icon; text]
 }}
 
 {client{
