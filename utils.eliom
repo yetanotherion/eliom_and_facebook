@@ -216,12 +216,12 @@ function getOffsetRect(elem) {
 
 
 
-  let print_event event wait_msg_spans =
+  let print_event event wait_msg_user_containers =
     let tds = [td [pcdata event.Fb.name];
                td [pcdata event.Fb.owner.Fb.name];
                td [pcdata event.Fb.venue.Fb.city];
                td [pcdata (epoch_to_light_date (to_epoch event.Fb.start_time))]]
-              @ (List.map (fun x -> td [x]) wait_msg_spans) in
+              @ (List.map (fun x -> td [x]) wait_msg_user_containers) in
     tr tds
 
   let substring_after_char string c =
@@ -255,8 +255,8 @@ function getOffsetRect(elem) {
     lwt invited = try_lwt process_rsvp url "invited" with _ -> Lwt.return [] in
     Lwt.return (attending, declined, invited)
 
-  let display_rsvp users wait_span =
-      Html5.Manip.replaceChildren wait_span [pcdata (Printf.sprintf "%d" (List.length users))]
+  let display_rsvp users wait_user_container =
+      Html5.Manip.replaceChildren wait_user_container [pcdata (Printf.sprintf "%d" (List.length users))]
 
   let display_all_rsvp rsvp_info_display =
     List.iter (fun (rsvp_info, display) -> display_rsvp rsvp_info display) rsvp_info_display
@@ -264,39 +264,39 @@ function getOffsetRect(elem) {
   let make_tds data =
     List.map (fun y -> td [y]) data
 
-  type one_span = [ | `Span] elt
+  type one_user_container = [ | `Div] elt
 
-  let make_wait_span () =
-    span [pcdata "please wait as we gather data..."]
+  let make_wait_user_container () =
+    div [pcdata "please wait as we gather data..."]
 
-  type spans = {
-    event_name_span: one_span;
-    event_owner_span: one_span;
-    event_venue_span: one_span;
-    event_start_time_span: one_span;
-    attending_span: one_span;
-    declined_span: one_span;
-    invited_span: one_span;
+  type user_containers = {
+    event_name_user_container: one_user_container;
+    event_owner_user_container: one_user_container;
+    event_venue_user_container: one_user_container;
+    event_start_time_user_container: one_user_container;
+    attending_user_container: one_user_container;
+    declined_user_container: one_user_container;
+    invited_user_container: one_user_container;
   }
 
-  let create_spans () = {
-    event_name_span = make_wait_span ();
-    event_owner_span = make_wait_span ();
-    event_venue_span = make_wait_span ();
-    event_start_time_span = make_wait_span ();
-    attending_span = make_wait_span ();
-    declined_span = make_wait_span ();
-    invited_span = make_wait_span ();
+  let create_user_containers () = {
+    event_name_user_container = make_wait_user_container ();
+    event_owner_user_container = make_wait_user_container ();
+    event_venue_user_container = make_wait_user_container ();
+    event_start_time_user_container = make_wait_user_container ();
+    attending_user_container = make_wait_user_container ();
+    declined_user_container = make_wait_user_container ();
+    invited_user_container = make_wait_user_container ();
   }
 
-  let integrate_spans_in_td spans =
-    make_tds [spans.event_name_span;
-              spans.event_owner_span;
-              spans.event_venue_span;
-              spans.event_start_time_span;
-              spans.attending_span;
-              spans.declined_span;
-              spans.invited_span]
+  let integrate_user_containers_in_td user_containers =
+    make_tds [user_containers.event_name_user_container;
+              user_containers.event_owner_user_container;
+              user_containers.event_venue_user_container;
+              user_containers.event_start_time_user_container;
+              user_containers.attending_user_container;
+              user_containers.declined_user_container;
+              user_containers.invited_user_container]
 
   let process_event_answer url res =
       match res with
@@ -308,13 +308,13 @@ function getOffsetRect(elem) {
         end
         | Fb.Ok event -> `Ok event
 
-  let replace_event_spans event spans =
-    List.iter (fun (span, value) ->
-      Html5.Manip.replaceChildren span [pcdata value])
-      [(spans.event_name_span, event.name);
-       (spans.event_owner_span, event.owner);
-       (spans.event_venue_span, event.location);
-       (spans.event_start_time_span, (epoch_to_light_date event.start_date))]
+  let replace_event_user_containers event user_containers =
+    List.iter (fun (user_container, value) ->
+      Html5.Manip.replaceChildren user_container [pcdata value])
+      [(user_containers.event_name_user_container, event.name);
+       (user_containers.event_owner_user_container, event.owner);
+       (user_containers.event_venue_user_container, event.location);
+       (user_containers.event_start_time_user_container, (epoch_to_light_date event.start_date))]
 
   let print_event event =
     [td [pcdata event.name];

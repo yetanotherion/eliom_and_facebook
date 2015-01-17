@@ -79,6 +79,7 @@ let vertical_fire_func x yO yD =
     (fun x -> (float_of_int x) *. t_end /. number_points)
     (range 0 (int_of_float number_points))
   in
+  Utils.log (Printf.sprintf "%f->%d" x (int_of_float x));
   List.map (fun t -> (int_of_float x), f t) t_range
 
 let parabolic_func_param ?coeff:(c=0.1) yO xO yD xD =

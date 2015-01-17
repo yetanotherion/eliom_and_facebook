@@ -70,8 +70,8 @@ type selected_events = [
 
 type reference_event = [
 | `Undefined
-| `Resolving of (Utils.event * Utils.spans)
-| `Resolved of (Utils.event_and_users * Utils.spans)
+| `Resolving of (Utils.event * Utils.user_containers)
+| `Resolved of (Utils.event_and_users * Utils.user_containers)
 ]
 
 type user_set = {
@@ -148,7 +148,7 @@ type 'a one_legend_button_move = {
 
 type 'a ui_events = {
   events_in_db_container: Utils.event Events_store.t;
-  selected_events: (selected_events * Utils.spans) Events_store.t;
+  selected_events: (selected_events * Utils.user_containers) Events_store.t;
   resolved_events_cache: Utils.event_and_users Events_store.t;
   nb_event_per_request: int;
   url_input: Dom_html.inputElement Js.t;
@@ -172,7 +172,7 @@ type 'a ui_events = {
   mutable buttons_to_move: 'a one_button_to_move list;
   mutable legend_buttons_to_move: 'a one_legend_button_move list;
   mutable all_users_container: Utils.RsvpSet.t;
-  demo_text_span: 'a Eliom_content.Html5.elt;
+  demo_text_user_container: 'a Eliom_content.Html5.elt;
   example_queries: Dom_html.element Js.t;
 }
 
@@ -264,7 +264,7 @@ let create
     all_users_div
     reference_event_title reference_event_div_container reference_event_div reference_event_table
     selected_events_title selected_events_div_container selected_events_div selected_events_table
-    legend_div demo_text_span example_queries =
+    legend_div demo_text_user_container example_queries =
   {
     events_in_db_container = Events_store.create 100;
     selected_events = Events_store.create 100;
@@ -291,7 +291,7 @@ let create
     buttons_to_move = [];
     legend_buttons_to_move = [];
     all_users_container = Utils.RsvpSet.empty;
-    demo_text_span = demo_text_span;
+    demo_text_user_container = demo_text_user_container;
     example_queries = Html5.To_dom.of_element example_queries;
   }
 
@@ -308,7 +308,7 @@ let make_user_button t user utype text =
   Lwt.async (fun () -> dragstarts res_dom ondragstarts);
   res, button, text, copy
 
-let display_compared_rsvp t event compared_users compared_span =
+let display_compared_rsvp t event compared_users compared_user_container =
   (*let () = check_event_coherence event in*)
   let compared_users_set = Utils.make_rsvp_set compared_users in
   let user_sets, compared_user = append_new_user_set t.user_sets compared_users_set in
@@ -331,24 +331,24 @@ let display_compared_rsvp t event compared_users compared_span =
   let buttons = List.map (fun (u, x, y, rel_button_type) -> let div, button, text, copy = make_user_button t u x y in
                                                             div, (button, rel_button_type, text, copy)) map_arg
   in
-  Html5.Manip.replaceChildren compared_span (List.map Pervasives.fst buttons);
+  Html5.Manip.replaceChildren compared_user_container (List.map Pervasives.fst buttons);
   t.user_sets <- user_sets;
   List.map Pervasives.snd buttons
 
-let display_rsvp t users span =
+let display_rsvp t users user_container =
   let user_sets, displayed_users = append_new_user_set t.user_sets (Utils.make_rsvp_set users) in
-  let under_span, button, text, copy = make_user_button t displayed_users `All_events (Printf.sprintf "%d" (List.length users)) in
-  Html5.Manip.replaceChildren span [under_span];
+  let under_user_container, button, text, copy = make_user_button t displayed_users `All_events (Printf.sprintf "%d" (List.length users)) in
+  Html5.Manip.replaceChildren user_container [under_user_container];
   t.user_sets <- user_sets;
   button, text, copy
 
-let process_event t event spans user_ref =
+let process_event t event user_containers user_ref =
  try_lwt
   let event_url = event.Utils.url in
   lwt res = Utils.lwt_api_event event_url in
   match (Utils.process_event_answer event.Utils.url res) with
     | `Err x -> begin
-      Html5.Manip.replaceChildren spans.Utils.event_name_span x;
+      Html5.Manip.replaceChildren user_containers.Utils.event_name_user_container x;
       Lwt.return_unit
     end
     | `Ok event -> begin
@@ -359,24 +359,24 @@ let process_event t event spans user_ref =
       Lwt.return_unit
     end
   with x -> begin
-    Html5.Manip.replaceChildren spans.Utils.event_name_span
+    Html5.Manip.replaceChildren user_containers.Utils.event_name_user_container
       [pcdata (Printf.sprintf "Invalid event %s" (Printexc.to_string x))];
     Lwt.return_unit
   end
 
-let resolve_event t event spans =
+let resolve_event t event user_containers =
  let event_ref = ref None in
  let must x = match x with | None -> assert(false) | Some x -> x in
- lwt () = process_event t event spans event_ref in
+ lwt () = process_event t event user_containers event_ref in
  let () = Events_store.remove t.selected_events event.Utils.url in
  let () = Events_store.remove t.resolved_events_cache event.Utils.url in
  let resolved_event = must !event_ref in
  let () = Events_store.add t.selected_events event.Utils.url (`Resolved resolved_event,
-                                                              spans) in
+                                                              user_containers) in
  let () = Events_store.add t.resolved_events_cache event.Utils.url resolved_event in
  Lwt.return_unit
 
-let display_event ?ref_event:(r=None) ?filter_attending_type:(f_attending=fun _ -> true) t event span =
+let display_event ?ref_event:(r=None) ?filter_attending_type:(f_attending=fun _ -> true) t event user_container =
   let f arg =
     let u, s, rsvp_info_type = arg in
     match r with
@@ -393,9 +393,9 @@ let display_event ?ref_event:(r=None) ?filter_attending_type:(f_attending=fun _ 
                                             elt_on_the_right = copy;
                                            }) (display_compared_rsvp t ref_event u s)
   in
-  flatten (List.map f (List.filter f_attending [(event.Utils.attending, span.Utils.attending_span, `Attending);
-                                                (event.Utils.declined, span.Utils.declined_span, `Declined);
-                                                (event.Utils.invited, span.Utils.invited_span, `Invited)]))
+  flatten (List.map f (List.filter f_attending [(event.Utils.attending, user_container.Utils.attending_user_container, `Attending);
+                                                (event.Utils.declined, user_container.Utils.declined_user_container, `Declined);
+                                                (event.Utils.invited, user_container.Utils.invited_user_container, `Invited)]))
 
 let refresh_compared_buttons_only t button_param =
   let event_url = button_param.related_event_id in
@@ -404,7 +404,7 @@ let refresh_compared_buttons_only t button_param =
     let _, _, b_elt_button_type = b_elt in
     b_elt_button_type = button_type
   in
-  let curr_event, spans = Events_store.find t.selected_events event_url in
+  let curr_event, user_containers = Events_store.find t.selected_events event_url in
   let curr_event = match curr_event with
     | `Resolving _ -> assert(false)
     | `Resolved curr_event -> curr_event in
@@ -412,7 +412,7 @@ let refresh_compared_buttons_only t button_param =
     | `Undefined | `Resolving (_, _) -> assert(false)
     | `Resolved (ref_event, _) -> ref_event
   in
-  let buttons = display_event ~filter_attending_type:filter_bt ~ref_event:(Some ref_event) t curr_event spans in
+  let buttons = display_event ~filter_attending_type:filter_bt ~ref_event:(Some ref_event) t curr_event user_containers in
   t.buttons_to_move <- List.append (List.filter (fun x ->
     let related_event = x.related_event_id = event_url in
     let rsvp_info_type, bt = x.displayed_information in
@@ -421,24 +421,24 @@ let refresh_compared_buttons_only t button_param =
 
 let refresh_ui t =
  let resolved_events = ref [] in
- let () = Events_store.iter (fun k (event, spans) ->
+ let () = Events_store.iter (fun k (event, user_containers) ->
    match event with
      | `Resolving _ -> ()
-     | `Resolved x -> resolved_events:= (x, spans) :: !resolved_events)
+     | `Resolved x -> resolved_events:= (x, user_containers) :: !resolved_events)
    t.selected_events
  in
  let buttons, ref_event_resolved =
  match t.ref_event with
    | `Undefined | `Resolving (_, _) -> begin
-     (flatten (List.map (fun (curr_event, span) ->
-                         display_event t curr_event span)
+     (flatten (List.map (fun (curr_event, user_container) ->
+                         display_event t curr_event user_container)
                !resolved_events),
       false)
    end
-   | `Resolved (ref_event, ref_span) -> begin
-     let ref_buttons = display_event t ref_event ref_span in
-     let all_other_buttons = flatten (List.map (fun (curr_event, span) ->
-                                                display_event ~ref_event:(Some ref_event) t curr_event span)
+   | `Resolved (ref_event, ref_user_container) -> begin
+     let ref_buttons = display_event t ref_event ref_user_container in
+     let all_other_buttons = flatten (List.map (fun (curr_event, user_container) ->
+                                                display_event ~ref_event:(Some ref_event) t curr_event user_container)
                                       !resolved_events) in
      (List.append ref_buttons all_other_buttons, true)
    end
@@ -524,19 +524,19 @@ let drop_event_id_in_selected_events t event_id =
   let () = match Events_store.mem t.selected_events event_id with
     | false -> begin
       let event = Events_store.find t.events_in_db_container event_id in
-      let spans = Utils.create_spans () in
-      let () = Utils.replace_event_spans event spans in
+      let user_containers = Utils.create_user_containers () in
+      let () = Utils.replace_event_user_containers event user_containers in
       match Events_store.mem t.resolved_events_cache event_id with
-        | false -> let () = to_resolve_lwt:= Some (resolve_event t event spans) in
-                   Events_store.add t.selected_events event.Utils.url ((`Resolving event, spans))
+        | false -> let () = to_resolve_lwt:= Some (resolve_event t event user_containers) in
+                   Events_store.add t.selected_events event.Utils.url ((`Resolving event, user_containers))
         | true -> let resolved_event = Events_store.find t.resolved_events_cache event_id in
-                  Events_store.add t.selected_events event.Utils.url ((`Resolved resolved_event, spans))
+                  Events_store.add t.selected_events event.Utils.url ((`Resolved resolved_event, user_containers))
     end
     | true -> () in
     (* display the UI with temporarily non available data *)
   let trs = ref [] in
   let () = Events_store.iter (fun url (_, s) ->
-    trs:= tr ~a:[a_id url] (Utils.integrate_spans_in_td s) :: !trs)
+    trs:= tr ~a:[a_id url] (Utils.integrate_user_containers_in_td s) :: !trs)
     t.selected_events in
   let table = Utils.make_complete_event_table ~caption:(Some t.selected_events_title) !trs in
   Html5.Manip.replaceChildren t.selected_events_div [table];
@@ -557,23 +557,23 @@ let drop_event_id_in_reference_event t event_id =
   let to_resolve_lwt = ref None in
   let create_new_ref_event () =
     let event = Events_store.find t.events_in_db_container event_id in
-    let spans = Utils.create_spans () in
-    let () = Utils.replace_event_spans event spans in
+    let user_containers = Utils.create_user_containers () in
+    let () = Utils.replace_event_user_containers event user_containers in
     let resolve_ref_event () =
       let event_ref = ref None in
       let must x = match x with | None -> assert(false) | Some x -> x in
-      lwt () = process_event t event spans event_ref in
+      lwt () = process_event t event user_containers event_ref in
       let resolved_event = must !event_ref in
-      let () = t.ref_event <- `Resolved (resolved_event, spans) in
+      let () = t.ref_event <- `Resolved (resolved_event, user_containers) in
       let () = Events_store.remove t.resolved_events_cache event.Utils.url in
       let () = Events_store.add t.resolved_events_cache event.Utils.url resolved_event in
       Lwt.return_unit
     in
     match Events_store.mem t.resolved_events_cache event_id with
       | false -> let () = to_resolve_lwt := Some (resolve_ref_event ()) in
-                 t.ref_event <- `Resolving (event, spans)
+                 t.ref_event <- `Resolving (event, user_containers)
       | true -> let resolved_event = Events_store.find t.resolved_events_cache event_id in
-                t.ref_event <- `Resolved (resolved_event, spans);
+                t.ref_event <- `Resolved (resolved_event, user_containers);
   in
   let () = match t.ref_event with
     | `Undefined -> create_new_ref_event ()
@@ -585,12 +585,12 @@ let drop_event_id_in_reference_event t event_id =
       else create_new_ref_event ()
   in
   (* display the UI with, maybe, temporarily non available data *)
-  let id, span = match t.ref_event with
+  let id, user_container = match t.ref_event with
     | `Undefined -> assert(false)
     | `Resolved (r, s) -> (r.Utils.ev_url, s)
     | `Resolving (r, s) -> (r.Utils.url, s)
   in
-  let trs = [tr ~a:[a_id id] (Utils.integrate_spans_in_td span)] in
+  let trs = [tr ~a:[a_id id] (Utils.integrate_user_containers_in_td user_container)] in
   let table = Utils.make_complete_event_table ~caption:(Some t.reference_event_title) trs in
   Html5.Manip.replaceChildren t.reference_event_div [table];
   (* wait for the resolution of FB requests *)
@@ -627,5 +627,5 @@ let set_demo_text t texto =
     | None -> []
     | Some (text, class_name) -> [div ~a:[a_class [class_name]] [pcdata text]]
   in
-  Html5.Manip.replaceChildren t.demo_text_span to_set
+  Html5.Manip.replaceChildren t.demo_text_user_container to_set
 }}
