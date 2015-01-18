@@ -38,6 +38,12 @@ let events = <:table< events (
   nb_invited integer NOT NULL
 ) >>
 
+let users = <:table< users (
+  id text NOT NULL,
+  name text NOT NULL,
+  nb_event_added integer NOT NULL
+) >>
+
 let make_event event_db =
   let open Utils in
       { url = event_db#!url;
@@ -50,6 +56,12 @@ let make_event event_db =
         nb_invited = Int32.to_int event_db#!nb_invited;
       }
 
+let make_user user_db =
+  let open Utils in
+  {user_id = user_db#!id;
+   user_name = user_db#!name;
+   nb_event_added = Int32.to_int user_db#!nb_event_added}
+
 let get_event url =
   lwt dbh = get_db () in
   match_lwt (Lwt_Query.query dbh
@@ -59,7 +71,15 @@ let get_event url =
     | hd :: _ -> Lwt.return (Some (make_event hd))
 
 
-let do_insert event =
+let get_user userid =
+  lwt dbh = get_db () in
+  match_lwt (Lwt_Query.query dbh
+             <:select< row | row in $users$; row.id = $string:userid$ >>)
+  with
+    | [] -> Lwt.return None
+    | hd :: _ -> Lwt.return (Some (make_user hd))
+
+let do_insert_event event =
   let open Utils in
   lwt dbh = get_db () in
   Lwt_Query.query dbh
@@ -72,14 +92,37 @@ let do_insert event =
                           nb_declined = $int32:Int32.of_int event.nb_declined$;
                           nb_invited = $int32:Int32.of_int event.nb_invited$
                          } >>
+let do_insert_user user =
+  let open Utils in
+  lwt dbh = get_db () in
+  Lwt_Query.query dbh
+   <:insert< $users$ := {id = $string:user.user_id$;
+                         name = $string:user.user_name$;
+                         nb_event_added = $int32:Int32.of_int user.nb_event_added$;
+                        } >>
 
-let insert event =
+let insert_event event =
   match_lwt (get_event event.Utils.url) with
     | None -> begin
-      lwt _ = do_insert event in
+      lwt _ = do_insert_event event in
       Lwt.return None
       end
     | Some hd -> Lwt.return (Some hd)
+
+let insert_user user =
+  match_lwt (get_user user.Utils.user_id) with
+    | None -> begin
+      lwt _ = do_insert_user user in
+      Lwt.return_unit
+      end
+    | Some _ -> Lwt.return_unit
+
+let update_user_nb_event userid nb_event =
+  let open Utils in
+  lwt dbh = get_db () in
+  Lwt_Query.query dbh
+   <:update< t in $users$ := {nb_event_added = $int32:Int32.of_int nb_event$}
+             |  t.id = $string:userid$ >>
 
 let parse_query str =
    let lexbuf = Lexing.from_string str in

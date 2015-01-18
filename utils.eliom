@@ -14,6 +14,13 @@
     nb_invited: int;
   }
 
+  type application_user = {
+    user_id: string;
+    user_name: string;
+    mutable nb_event_added: int;
+  }
+
+
   type event_user = String.t * String.t
   module RsvpSet = Set.Make (
     struct
@@ -75,6 +82,8 @@ let bootstrap_metas = [utf8_meta;
 
 {client{
 
+  let log s = Firebug.console##log(Js.string s)
+
   let hidde_element elt =
     if not (Js.to_bool (elt##classList##contains(Js.string "hidden")))
     then elt##classList##add(Js.string "hidden")
@@ -89,8 +98,6 @@ let bootstrap_metas = [utf8_meta;
     Js.to_string (Js.Opt.get (element##getAttribute (Js.string "id")) (fun () -> assert false))
 
   let getBoundingClientRect element = element##getBoundingClientRect()
-
-  let log s = Firebug.console##log(Js.string s)
 
 (* XXX
 http://javascript.info/tutorial/coordinates
@@ -163,6 +170,7 @@ function getOffsetRect(elem) {
     fjs
 
   let init () =
+    log "in init";
     Fb.init { Fb.appId = "534442833338989";
               Fb.cookie = true;
 	      Fb.xfbml = false;
@@ -201,6 +209,15 @@ function getOffsetRect(elem) {
     Fb.getLoginStatus f;
     flogin
 
+  let lwt_get_me () =
+    let url = "v2.0/me" in
+    let api, fwakener = Lwt.wait () in
+    let f res =
+      Lwt.wakeup fwakener res
+    in
+    let () = Fb.api_profile url f in
+    api
+
   let lwt_autologin () =
     match_lwt (lwt_shouldlogin ()) with
       | true -> begin
@@ -209,17 +226,27 @@ function getOffsetRect(elem) {
         end
       | false -> Lwt.return_unit
 
-  let lwt_api_event url =
+  let get_user_id logged_user_ref =
+    lwt () = lwt_autologin () in
+    match !logged_user_ref with
+      | None -> begin
+        lwt res = lwt_get_me () in
+        let () = logged_user_ref := Some {user_id=res.Fb.profile_id;
+                                          user_name=res.Fb.profile_name;
+                                          nb_event_added=0} in
+        Lwt.return_unit
+        end
+      | Some _ -> Lwt.return_unit
+
+  let lwt_api_event logged_user_ref url =
     let url = "v2.0/" ^ url in
     let api, fwakener = Lwt.wait () in
     let f res =
       Lwt.wakeup fwakener res
     in
-    lwt () = lwt_autologin () in
+    lwt () = get_user_id logged_user_ref in
     Fb.api_event url f;
     api
-
-
 
   let print_event event wait_msg_user_containers =
     let tds = [td [pcdata event.Fb.name];
@@ -233,8 +260,8 @@ function getOffsetRect(elem) {
     let next_char_idx = (String.index string c) + 1 in
     String.sub string next_char_idx ((String.length string) - next_char_idx)
 
-  let rec gather_all_users url res =
-    match_lwt (lwt_api_event url) with
+  let rec gather_all_users logged_user_ref url res =
+    match_lwt (lwt_api_event logged_user_ref url) with
       | Fb.Nok error -> begin
         raise_lwt (Failure "error")
       end
@@ -248,16 +275,16 @@ function getOffsetRect(elem) {
           | None -> Lwt.return new_res
           | Some x ->
             let next_param = substring_after_char x '?' in
-            gather_all_users (Printf.sprintf "%s?%s" url next_param) new_res
+            gather_all_users logged_user_ref (Printf.sprintf "%s?%s" url next_param) new_res
 
-  let process_rsvp url users_name =
-   lwt all_users = gather_all_users (url ^ "/" ^ users_name) [] in
+  let process_rsvp logged_user_ref url users_name =
+   lwt all_users = gather_all_users logged_user_ref (url ^ "/" ^ users_name) [] in
    Lwt.return all_users
 
-  let process_all_rsvp url =
-    lwt attending = process_rsvp url "attending" in
-    lwt declined = process_rsvp url "declined" in
-    lwt invited = try_lwt process_rsvp url "invited" with _ -> Lwt.return [] in
+  let process_all_rsvp logged_user_ref url =
+    lwt attending = process_rsvp logged_user_ref url "attending" in
+    lwt declined = process_rsvp logged_user_ref url "declined" in
+    lwt invited = try_lwt process_rsvp logged_user_ref url "invited" with _ -> Lwt.return [] in
     Lwt.return (attending, declined, invited)
 
   let display_rsvp label users user_container =

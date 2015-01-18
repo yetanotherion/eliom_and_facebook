@@ -469,22 +469,34 @@ object
   method is_demo_finished () = MBM.is_demo_finished arg
 end
 
+type 'a demo_state = [
+| `Start
+| `MakeUserLog of unit Lwt.t
+| `DisplayDb of unit Lwt.t
+| `CheckUserExists of Utils.application_user option Lwt.t
+| `RegisterUser of unit Lwt.t
+| `DoDemo of 'a demo_move_type list
+| `Done
+]
+
 type 'a ui_with_demo = {
   ui_events: 'a Ui_events.ui_events;
-  mutable demo: 'a demo_move_type list;
+  mutable demo: 'a demo_state;
 }
 
-let play_demo t = fun () ->
-  match t.demo with
-    | [] -> ()
-    | hd :: tl -> begin
-      let () = hd#next_move t.ui_events in
-      if hd#is_demo_finished () then t.demo <- tl
-    end
 
-let stop_demo t = t.demo <- []
+let make_jsonable_user user_id username = {
+  Users.user_id = user_id;
+  Users.user_name = username;
+  Users.nb_event_added = 0;
+}
 
-let create ui_events =
+let must_get_user t =
+  match !(t.ui_events.Ui_events.logged_user_ref) with
+    | None -> assert(false)
+    | Some x -> x
+
+let create_moves () =
   let () = Random.self_init () in
   let constructors =
     [(fun x -> (new eae (EAE.create "First choose an event the audience you're looking for might have liked" x) :> 'a demo_move_type));
@@ -506,14 +518,62 @@ let create ui_events =
     ("triangle-obtuse", []) constructors
   in
   let _, demo = moves in
+  List.rev demo
+
+let play_demo t = t.demo <- `DoDemo (create_moves ())
+
+let run_demo t = fun () ->
+  match t.demo with
+    | `Start -> begin t.demo <- `MakeUserLog (Utils.get_user_id t.ui_events.Ui_events.logged_user_ref) end
+    | `MakeUserLog lt -> begin
+      match Lwt.state lt with
+        | Lwt.Return () -> begin t.demo <- `DisplayDb (Ui_events.get_events_in_db t.ui_events None) end
+        | _ -> ()
+    end
+    | `DisplayDb lt -> begin
+      match Lwt.state lt with
+        | Lwt.Return () -> begin
+          let user = must_get_user t in
+          t.demo <- `CheckUserExists (%Users.rpc_user_exists user.Utils.user_id)
+        end
+        | _ -> ()
+    end
+    | `CheckUserExists lt -> begin
+      match Lwt.state lt with
+        | Lwt.Return x -> begin
+          match x with
+            | None -> begin
+              let user = must_get_user t in
+              t.demo <- `RegisterUser (%Users.rpc_insert_user (make_jsonable_user user.Utils.user_id user.Utils.user_name))
+            end
+            | Some _ -> begin t.demo <- `Done end
+        end
+        | _ -> ()
+    end
+    | `RegisterUser lt -> begin
+      match Lwt.state lt with
+        | Lwt.Return _ -> begin play_demo t end
+        | _ -> ()
+    end
+    | `DoDemo l -> begin
+      match l with
+        | [] -> begin t.demo <- `Done end
+        | hd :: tl -> begin
+          let () = hd#next_move t.ui_events in
+          if hd#is_demo_finished () then t.demo <- `DoDemo tl
+        end
+    end
+    | `Done -> ()
+
+let stop_demo t = t.demo <- `Done
+
+let create ui_events =
   let ui_with_demo =
     {
       ui_events = ui_events;
-      demo = List.rev demo;
+      demo = `Start;
     }
   in
-  ignore (Dom_html.window##setInterval(Js.wrap_callback (play_demo ui_with_demo),
-                                       0.05 *. 1000.));
   ui_with_demo
 
 let ondragover ev _ =
@@ -529,9 +589,6 @@ let setup t =
   let open Lwt_js_events in
   let ui_events = t.ui_events in
   async (fun () ->
-         lwt () = Utils.lwt_autologin () in
-         Ui_events.get_events_in_db ui_events None);
-  async (fun () ->
          changes ui_events.Ui_events.url_input (Ui_events.on_db_input_changes ui_events));
   async (fun () ->
          dragovers ui_events.Ui_events.all_users_div ondragover);
@@ -544,6 +601,9 @@ let setup t =
   async (fun () ->
          drops ui_events.Ui_events.reference_event_div_container (Ui_events.on_user_drop_in_ref_event ui_events));
   async (fun () ->
-         drops ui_events.Ui_events.selected_events_div_container (Ui_events.on_user_drop_in_selected_events ui_events))
+         drops ui_events.Ui_events.selected_events_div_container (Ui_events.on_user_drop_in_selected_events ui_events));
+  ignore (Dom_html.window##setInterval(Js.wrap_callback (run_demo t),
+                                       0.05 *. 1000.));
+
 
 }}

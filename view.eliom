@@ -18,6 +18,8 @@ let view_service unused unused2 =
       in
       td [pcdata text]) six)]
   in
+  (* XXX need to implement it with an rpc that sets an Eliom_reference accordingly *)
+  let logged_userid = (ref None: (Utils.application_user option ref)) in
   let selected_events_title = "Selected events" in
   let reference_event_title = "Reference event" in
   let selected_events_table = create_initial_table selected_events_title "Drag and drop one of the events here" in
@@ -50,10 +52,10 @@ let view_service unused unused2 =
                                 %all_users_div
                                 %reference_event_title %reference_event_div_container %reference_event_div %reference_event_table
                                 %selected_events_title %selected_events_div_container %selected_events_div %selected_events_table
-                                %legend_div %demo_text_user_container %example_queries
+                                %legend_div %demo_text_user_container %example_queries %logged_userid
     in
     let () = View_events.setup (View_events.create ui_t) in
-    Insert.setup (Insert.create %insert_url %insert_button %insert_user_container)
+    Insert.setup (Insert.create %insert_url %insert_button %insert_user_container %logged_userid)
   }}
   in
   let create_li elements =

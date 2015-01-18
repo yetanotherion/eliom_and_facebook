@@ -17,9 +17,10 @@
 }}
 
 {server{
-let my_insert event =
+
+let my_insert_event event =
   (* we make the conversion now *)
-  Db.insert {
+  Db.insert_event {
     Utils.url = event.url;
     Utils.location = event.location;
     Utils.start_date = Utils.to_epoch event.start_time;
@@ -31,7 +32,7 @@ let my_insert event =
   }
 
 let rpc_insert_event =
-  server_function Json.t<jsonable_event> my_insert
+  server_function Json.t<jsonable_event> my_insert_event
 
 let rpc_event_exists =
   server_function Json.t<string> Db.get_event
@@ -84,14 +85,16 @@ let rpc_event_exists =
      url_input: Dom_html.inputElement Js.t;
      button: 'a Eliom_content.Html5.elt;
      user_container: 'a Eliom_content.Html5.elt;
-     mutable to_insert: jsonable_event option
+     mutable to_insert: jsonable_event option;
+     logged_user_ref: Utils.application_user option ref;
    }
 
-  let create url_input button user_container =
+  let create url_input button user_container logged_user_ref =
     {url_input=Html5.To_dom.of_input url_input;
      button=button;
      user_container=user_container;
-     to_insert=None}
+     to_insert=None;
+     logged_user_ref = logged_user_ref}
 
   let get_input_text t = Js.to_string t.url_input##value
 
@@ -116,7 +119,7 @@ let rpc_event_exists =
         let event_line = tr (make_event_display_line event attending_s declined_s invited_s) in
         let displayed_table = Utils.make_insert_event_table [event_line] in
         Html5.Manip.replaceChildren t.user_container [displayed_table];
-        lwt res = Utils.process_all_rsvp input_text in
+        lwt res = Utils.process_all_rsvp t.logged_user_ref input_text in
         let (attending, declined, invited) = res in
         Utils.display_all_rsvp [("attending", attending, attending_s);
                                 ("declined", declined, declined_s);
@@ -129,6 +132,10 @@ let rpc_event_exists =
 
    let on_url_input_changes t _ _ =
      let button_dom = Html5.To_dom.of_element t.button in
+     let () = match !(t.logged_user_ref) with
+       | None -> Utils.log "insert: no one"
+       | Some x -> Utils.log (Printf.sprintf "insert: logged as %s" (x.Utils.user_id))
+     in
      Utils.hidde_element button_dom;
      Html5.Manip.replaceChildren t.user_container [];
      let input_text = get_input_text t in
@@ -146,7 +153,7 @@ let rpc_event_exists =
      try_lwt begin
        match_lwt %rpc_event_exists input_text with
          | None -> begin
-           lwt res = Utils.lwt_api_event input_text in
+           lwt res = Utils.lwt_api_event t.logged_user_ref input_text in
            lwt () = process_res t res in
            Lwt.return_unit
          end
