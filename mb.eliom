@@ -15,14 +15,12 @@ let main_service =
   Eliom_service.App.service ~path:[] ~get_params:Eliom_parameter.unit ()
 
 let setup_services () =
-  Mb_app.register_service ["add_events"] Eliom_parameter.unit Insert.insert_service,
   Mb_app.register_service ["manage_audience"] Eliom_parameter.unit View.view_service
 
 let () =
-  let insert, view = setup_services () in
+  let view = setup_services () in
   let links = ul ~a:[a_class ["nav"]]
-    [li ~a:[a_class ["active"]] [a ~service:view [pcdata "Manage your audience"] ()];
-     li [a ~service:insert [pcdata "Manage pool of events"] ()]]
+    [li ~a:[a_class ["active"]] [a ~service:view [pcdata "Manage your audience"] ()]]
   in
   let all_body = div ~a:[a_class ["container"]]
     [div ~a:[a_class ["masthead"]]

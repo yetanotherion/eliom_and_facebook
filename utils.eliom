@@ -51,6 +51,11 @@
     in
     curr_table
 
+  let make_insert_event_table data =
+    make_table ~caption:None ["Name"; "Owner";
+                              "Location"; "Start_time";
+                              "rsvp_info"] data
+
   let make_complete_event_table ?caption:(c=None) data =
     make_table ~caption:c ["Name"; "Owner";
                            "Location"; "Start_time";
@@ -255,19 +260,19 @@ function getOffsetRect(elem) {
     lwt invited = try_lwt process_rsvp url "invited" with _ -> Lwt.return [] in
     Lwt.return (attending, declined, invited)
 
-  let display_rsvp users wait_user_container =
-      Html5.Manip.replaceChildren wait_user_container [pcdata (Printf.sprintf "%d" (List.length users))]
+  let display_rsvp label users user_container =
+      Html5.Manip.replaceChildren user_container [pcdata (Printf.sprintf "%s: %d" label (List.length users))]
 
   let display_all_rsvp rsvp_info_display =
-    List.iter (fun (rsvp_info, display) -> display_rsvp rsvp_info display) rsvp_info_display
+    List.iter (fun (label, rsvp_info, user_container) -> display_rsvp label rsvp_info user_container) rsvp_info_display
 
   let make_tds data =
     List.map (fun y -> td [y]) data
 
   type one_user_container = [ | `Div] elt
 
-  let make_wait_user_container () =
-    div [pcdata "please wait as we gather data..."]
+  let make_wait_user_container ?label:(l="") () =
+    div [pcdata (l ^ "please wait as we gather data...")]
 
   type user_containers = {
     event_name_user_container: one_user_container;

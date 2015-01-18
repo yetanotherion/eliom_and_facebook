@@ -4,6 +4,7 @@ open Html5.D
 open Eliom_parameter
 }}
 
+let create_input_header x = h3 [pcdata x]
 
 let view_service unused unused2 =
   let db_selected_events_div = div [] in
@@ -33,7 +34,7 @@ let view_service unused unused2 =
                                                         reference_event_div_container;
                                                         legend_div] in
   let url_input = string_input ~input_type:`Text () in
-  let example_queries = div ~a:[a_class ["hidden"]] [pcdata "Some query examples:";
+  let example_queries = div ~a:[a_class ["hidden"]] [pcdata "Some search query examples:";
                                                      ul (List.map (fun x -> li [pcdata x])
                                                            ["nb_invited >= 1000";
                                                             "name != <some_name>";
@@ -41,6 +42,9 @@ let view_service unused unused2 =
                                                             "(nb_declined <= 100 nb_attending > 200 owner:<some_owner>) or (location:<some_city>)"
                                                            ])]
   in
+  let insert_url = string_input ~input_type:`Text () in
+  let insert_button = button ~a:[a_class ["hidden"; "btn"; "btn-lg"; "btn-primary"]] ~button_type:`Button [pcdata "Record"] in
+  let insert_user_container = div [] in
   let _ = {unit{
     let ui_t = Ui_events.create %url_input %db_selected_events_div
                                 %all_users_div
@@ -48,21 +52,29 @@ let view_service unused unused2 =
                                 %selected_events_title %selected_events_div_container %selected_events_div %selected_events_table
                                 %legend_div %demo_text_user_container %example_queries
     in
-    let t = View_events.create ui_t in
-    View_events.setup t
+    let () = View_events.setup (View_events.create ui_t) in
+    Insert.setup (Insert.create %insert_url %insert_button %insert_user_container)
   }}
   in
+  let create_li elements =
+    let lis = List.map (fun (el, attr) -> li ~a:attr [el]) elements in
+    [ul ~a:[a_class ["nav"; "nav-list"]] lis]
+  in
+  let insert_part = create_li [(create_input_header "Insert new events", []);
+                               (insert_url, [a_class ["active"]]);
+                               (insert_button, []);
+                               (insert_user_container, [])] in
+  let search_without_examples = create_li [(create_input_header "Search events", []);
+                                           (url_input, [a_class ["active"]]);
+                                           (db_selected_events_div, [])] in
+  let search_part = List.append search_without_examples [example_queries] in
+  let select_part = user_select_ui_div in
   let all_body = [Utils.fb_root_div;
                   demo_text_user_container;
                   div ~a:[a_class ["container-fluid"]]
                     [div ~a:[a_class ["row-fluid"]]
-                        [div ~a:[a_class ["span3"]]
-                            [div ~a:[a_class ["well"; "sidebar-nav"]]
-                                [ul ~a:[a_class ["nav"; "nav-list"]]
-                                    [li ~a:[a_class ["active"]] [url_input];
-                                     li [db_selected_events_div]]];
-                             example_queries];
-                         user_select_ui_div]]] in
+                        [div ~a:[a_class ["span3"]] [div ~a:[a_class ["well"; "sidebar-nav"]] (List.append insert_part search_part)];
+                         select_part]]] in
   let b = all_body @ Utils.bs_scripts in
   let h = Utils.bootstrap_metas @ Utils.bs_icons in
   Lwt.return (Eliom_tools.D.html ~title: "advertise your event"
