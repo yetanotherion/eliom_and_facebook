@@ -326,7 +326,7 @@ module ButtonsMoveNoMiddle = ButtonsMove (struct let do_middle = false end)
 module ButtonsMoveMiddle = ButtonsMove (struct let do_middle = true end)
 module MBN = MakeMove (ButtonsMoveNoMiddle)
 module MBM = MakeMove (ButtonsMoveNoMiddle)
-module EAE = MakeMove(EventsToAdditionalEvents(SelectAdditionalEvents) (struct let start_wait = 100 let end_wait = 0 end))
+module EAE = MakeMove(EventsToAdditionalEvents(SelectAdditionalEvents) (struct let start_wait = 30 let end_wait = 0 end))
 module ERE = MakeMove(EventsToAdditionalEvents(SelectReferenceEvent) (struct let start_wait = 30 let end_wait = 0 end))
 
 class type ['a] demo_move_type =
@@ -476,6 +476,8 @@ type 'a demo_state = [
 | `CheckUserExists of Utils.application_user option Lwt.t
 | `RegisterUser of unit Lwt.t
 | `DoDemo of 'a demo_move_type list
+| `ResetDemo of unit Lwt.t
+| `ResetDemoEnd
 | `Done
 ]
 
@@ -520,7 +522,13 @@ let create_moves () =
   let _, demo = moves in
   List.rev demo
 
-let play_demo t = t.demo <- `DoDemo (create_moves ())
+let start_demo t =
+  let () = Utils.hidde_html_element t.ui_events.Ui_events.play_demo_button in
+  let () = Utils.show_html_element t.ui_events.Ui_events.stop_demo_button in
+  `DoDemo (create_moves ())
+
+let stop_demo t =
+  `ResetDemo (Ui_events.reset_ui t.ui_events)
 
 let run_demo t = fun () ->
   match t.demo with
@@ -546,26 +554,34 @@ let run_demo t = fun () ->
               let user = must_get_user t in
               t.demo <- `RegisterUser (%Users.rpc_insert_user (make_jsonable_user user.Utils.user_id user.Utils.user_name))
             end
-            | Some _ -> begin t.demo <- `Done end
+            | Some _ -> begin t.demo <- `ResetDemoEnd end
         end
         | _ -> ()
     end
     | `RegisterUser lt -> begin
       match Lwt.state lt with
-        | Lwt.Return _ -> begin play_demo t end
+        | Lwt.Return _ -> begin t.demo <- start_demo t end
         | _ -> ()
     end
     | `DoDemo l -> begin
       match l with
-        | [] -> begin t.demo <- `Done end
+        | [] -> begin t.demo <- stop_demo t end
         | hd :: tl -> begin
           let () = hd#next_move t.ui_events in
           if hd#is_demo_finished () then t.demo <- `DoDemo tl
         end
     end
+    | `ResetDemo lt -> begin
+      match Lwt.state lt with
+        | Lwt.Return () -> t.demo <- `ResetDemoEnd
+        | _ -> ()
+    end
+    | `ResetDemoEnd -> begin
+      let () = Utils.hidde_html_element t.ui_events.Ui_events.stop_demo_button in
+      let () = Utils.show_html_element t.ui_events.Ui_events.play_demo_button in
+      t.demo <- `Done
+    end
     | `Done -> ()
-
-let stop_demo t = t.demo <- `Done
 
 let create ui_events =
   let ui_with_demo =
@@ -582,7 +598,15 @@ let ondragover ev _ =
 
 let on_all_users_div_drop t ev ev_arg =
   lwt () = Ui_events.on_all_users_div_drop t.ui_events ev ev_arg in
-  stop_demo t;
+  t.demo <- stop_demo t;
+  Lwt.return_unit
+
+let on_play_demo_button_clicks t _ _ =
+  t.demo <- start_demo t;
+  Lwt.return_unit
+
+let on_stop_demo_button_clicks t _ _ =
+  t.demo <- stop_demo t;
   Lwt.return_unit
 
 let setup t =
@@ -602,6 +626,10 @@ let setup t =
          drops ui_events.Ui_events.reference_event_div_container (Ui_events.on_user_drop_in_ref_event ui_events));
   async (fun () ->
          drops ui_events.Ui_events.selected_events_div_container (Ui_events.on_user_drop_in_selected_events ui_events));
+  async (fun () ->
+         clicks (Html5.To_dom.of_element t.ui_events.Ui_events.play_demo_button) (on_play_demo_button_clicks t));
+  async (fun () ->
+         clicks (Html5.To_dom.of_element t.ui_events.Ui_events.stop_demo_button) (on_stop_demo_button_clicks t));
   ignore (Dom_html.window##setInterval(Js.wrap_callback (run_demo t),
                                        0.05 *. 1000.));
 

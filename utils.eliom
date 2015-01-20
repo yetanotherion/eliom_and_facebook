@@ -92,6 +92,12 @@ let bootstrap_metas = [utf8_meta;
     if (Js.to_bool (elt##classList##contains(Js.string "hidden")))
     then elt##classList##remove(Js.string "hidden")
 
+  let show_html_element elt =
+    show_element (Html5.To_dom.of_element elt)
+
+  let hidde_html_element elt =
+    hidde_element (Html5.To_dom.of_element elt)
+
   let set_element_as_transparent elt = Html5.Manip.SetCss.opacity elt (Some "0.0")
 
   let get_element_id element =

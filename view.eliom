@@ -31,10 +31,13 @@ let view_service unused unused2 =
   let demo_text_user_container = div [] in
   let all_users_div = div ~a:[a_class ["hidden"]] (Ui_events.make_users_basket_in_div 0) in
   let legend_div = div [] in
-  let user_select_ui_div =  div ~a:[a_class ["span9"]] [all_users_div;
+  let play_demo_button = button ~a:[a_class ["hidden"; "btn"; "btn-lg"; "btn-primary"]] ~button_type:`Button [pcdata "Play demo"] in
+  let stop_demo_button = button ~a:[a_class ["hidden"; "btn"; "btn-lg"; "btn-primary"]] ~button_type:`Button [pcdata "Stop demo"] in
+  let user_select_ui_div = div ~a:[a_class ["span7"]] [all_users_div;
                                                         selected_events_div_container;
                                                         reference_event_div_container;
-                                                        legend_div] in
+                                                        table (tr [td [legend_div]; td [play_demo_button; stop_demo_button]]) [];
+                                                       ] in
   let url_input = string_input ~input_type:`Text () in
   let example_queries = div ~a:[a_class ["hidden"]] [pcdata "Some search query examples:";
                                                      ul (List.map (fun x -> li [pcdata x])
@@ -52,7 +55,7 @@ let view_service unused unused2 =
                                 %all_users_div
                                 %reference_event_title %reference_event_div_container %reference_event_div %reference_event_table
                                 %selected_events_title %selected_events_div_container %selected_events_div %selected_events_table
-                                %legend_div %demo_text_user_container %example_queries %logged_userid
+                                %legend_div %demo_text_user_container %example_queries %logged_userid %play_demo_button %stop_demo_button
     in
     let () = View_events.setup (View_events.create ui_t) in
     Insert.setup (Insert.create %insert_url %insert_button %insert_user_container %logged_userid)
@@ -75,7 +78,7 @@ let view_service unused unused2 =
                   demo_text_user_container;
                   div ~a:[a_class ["container-fluid"]]
                     [div ~a:[a_class ["row-fluid"]]
-                        [div ~a:[a_class ["span3"]] [div ~a:[a_class ["well"; "sidebar-nav"]] (List.append insert_part search_part)];
+                        [div ~a:[a_class ["span4"]] [div ~a:[a_class ["well"; "sidebar-nav"]] (List.append insert_part search_part)];
                          select_part]]] in
   let b = all_body @ Utils.bs_scripts in
   let h = Utils.bootstrap_metas @ Utils.bs_icons in

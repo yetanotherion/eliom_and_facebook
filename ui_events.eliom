@@ -175,6 +175,8 @@ type 'a ui_events = {
   demo_text_user_container: 'a Eliom_content.Html5.elt;
   example_queries: Dom_html.element Js.t;
   logged_user_ref: Utils.application_user option ref;
+  play_demo_button: 'a Eliom_content.Html5.elt;
+  stop_demo_button: 'a Eliom_content.Html5.elt;
 }
 
 let append_legend_button_move_from_icon_type icon icon_copy icon_type all_buttons =
@@ -265,7 +267,7 @@ let create
     all_users_div
     reference_event_title reference_event_div_container reference_event_div reference_event_table
     selected_events_title selected_events_div_container selected_events_div selected_events_table
-    legend_div demo_text_user_container example_queries logged_user_ref =
+    legend_div demo_text_user_container example_queries logged_user_ref play_demo_button stop_demo_button =
   {
     events_in_db_container = Events_store.create 100;
     selected_events = Events_store.create 100;
@@ -295,6 +297,8 @@ let create
     demo_text_user_container = demo_text_user_container;
     example_queries = Html5.To_dom.of_element example_queries;
     logged_user_ref = logged_user_ref;
+    play_demo_button = play_demo_button;
+    stop_demo_button = stop_demo_button;
   }
 
 let make_user_button t user utype text =
@@ -634,4 +638,12 @@ let set_demo_text t texto =
     | Some (text, class_name) -> [div ~a:[a_class [class_name]] [pcdata text]]
   in
   Html5.Manip.replaceChildren t.demo_text_user_container to_set
+
+let reset_ui t =
+  Events_store.clear t.selected_events;
+  t.ref_event <- `Undefined;
+  t.url_input##value <- (Js.string "");
+  lwt () = get_events_in_db t None in
+  let () = refresh_ui t in
+  Lwt.return_unit
 }}
