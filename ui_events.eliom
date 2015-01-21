@@ -447,6 +447,19 @@ let refresh_compared_buttons_only t button_param =
     let rsvp_info_type, bt = x.displayed_information in
     not (related_event && rsvp_info_type = button_type)) t.buttons_to_move) buttons
 
+let events_are_resolving t =
+  let res = ref false in
+  let () = Events_store.iter (fun k (event, user_containers) ->
+    match event with
+      | `Resolving _ -> res := true
+      | `Resolved _ -> ()) t.selected_events in
+  let () = match t.ref_event with
+    | `Resolving _ -> res := true
+    | `Undefined | `Resolved _ -> ()
+  in
+  !res
+
+let ready_for_real_demo_transition t = not (events_are_resolving t)
 
 let refresh_ui t =
  let resolved_events = ref [] in

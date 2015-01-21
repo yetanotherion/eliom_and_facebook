@@ -475,9 +475,12 @@ type 'a demo_state = [
 | `DisplayDb of unit Lwt.t
 | `CheckUserExists of Utils.application_user option Lwt.t
 | `RegisterUser of unit Lwt.t
+| `PollStartReady
 | `DoDemo of 'a demo_move_type list
-| `ResetDemo of unit Lwt.t
-| `ResetDemoEnd
+| `PollStopReady
+| `ResetDemoInStop of unit Lwt.t
+| `ResetDemoInStart of unit Lwt.t
+| `ResetDemoInStopEnd
 | `Done
 ]
 
@@ -522,13 +525,15 @@ let create_moves () =
   let _, demo = moves in
   List.rev demo
 
-let start_demo t =
-  let () = Utils.hidde_html_element t.ui_events.Ui_events.play_demo_button in
-  let () = Utils.show_html_element t.ui_events.Ui_events.stop_demo_button in
-  `DoDemo (create_moves ())
+let start_demo t = `PollStartReady
 
-let stop_demo t =
-  `ResetDemo (Ui_events.reset_ui t.ui_events)
+let stop_demo t = `PollStopReady
+
+let do_start_demo t =
+  `ResetDemoInStart (Ui_events.reset_ui t.ui_events)
+
+let do_stop_demo t =
+  `ResetDemoInStop (Ui_events.reset_ui t.ui_events)
 
 let run_demo t = fun () ->
   match t.demo with
@@ -554,13 +559,24 @@ let run_demo t = fun () ->
               let user = must_get_user t in
               t.demo <- `RegisterUser (%Users.rpc_insert_user (make_jsonable_user user.Utils.user_id user.Utils.user_name))
             end
-            | Some _ -> begin t.demo <- `ResetDemoEnd end
+            | Some _ -> begin t.demo <- `ResetDemoInStopEnd end
         end
         | _ -> ()
     end
     | `RegisterUser lt -> begin
       match Lwt.state lt with
         | Lwt.Return _ -> begin t.demo <- start_demo t end
+        | _ -> ()
+    end
+    | `PollStartReady -> begin
+      if Ui_events.ready_for_real_demo_transition t.ui_events then t.demo <- do_start_demo t
+    end
+    | `ResetDemoInStart lt -> begin
+      match Lwt.state lt with
+        | Lwt.Return () -> begin
+          let () = Utils.hidde_html_element t.ui_events.Ui_events.play_demo_button in
+          let () = Utils.show_html_element t.ui_events.Ui_events.stop_demo_button in
+          t.demo <- `DoDemo (create_moves ()) end
         | _ -> ()
     end
     | `DoDemo l -> begin
@@ -571,12 +587,16 @@ let run_demo t = fun () ->
           if hd#is_demo_finished () then t.demo <- `DoDemo tl
         end
     end
-    | `ResetDemo lt -> begin
+    | `PollStopReady -> begin
+      if Ui_events.ready_for_real_demo_transition t.ui_events then
+        t.demo <- do_stop_demo t
+    end
+    | `ResetDemoInStop lt -> begin
       match Lwt.state lt with
-        | Lwt.Return () -> t.demo <- `ResetDemoEnd
+        | Lwt.Return () -> t.demo <- `ResetDemoInStopEnd
         | _ -> ()
     end
-    | `ResetDemoEnd -> begin
+    | `ResetDemoInStopEnd -> begin
       let () = Utils.hidde_html_element t.ui_events.Ui_events.stop_demo_button in
       let () = Utils.show_html_element t.ui_events.Ui_events.play_demo_button in
       t.demo <- `Done
@@ -598,7 +618,6 @@ let ondragover ev _ =
 
 let on_all_users_div_drop t ev ev_arg =
   lwt () = Ui_events.on_all_users_div_drop t.ui_events ev ev_arg in
-  t.demo <- stop_demo t;
   Lwt.return_unit
 
 let on_play_demo_button_clicks t _ _ =
