@@ -157,11 +157,9 @@ type 'a ui_events = {
   reference_event_title: string;
   reference_event_div_container: Dom_html.element Js.t;
   reference_event_div: 'a Eliom_content.Html5.elt;
-  reference_event_table: Dom_html.element Js.t;
   selected_events_title: string;
   selected_events_div_container: Dom_html.element Js.t;
   selected_events_div: 'a Eliom_content.Html5.elt;
-  selected_events_table: Dom_html.element Js.t;
   legend_div: 'a Eliom_content.Html5.elt;
   mutable div_in_legend_div: 'a Eliom_content.Html5.elt;
   mutable legend_displayed: bool;
@@ -261,14 +259,37 @@ let display_legend_div ?force:(f=false) t =
     t.legend_displayed <- true;
     t.legend_buttons_to_move <- !all_buttons
 
+
+let create_initial_table header message =
+  let six = [1; 2; 3; 4; 5; 6; 7] in
+  Utils.make_complete_event_table ~caption:(Some header)
+    [tr (List.map (fun d ->
+      let text =
+        if d = 1 then message
+        else ""
+      in
+      td [pcdata text]) six)]
+
+let create_initial_tables t =
+  Html5.Manip.replaceChildren t.reference_event_div [create_initial_table t.reference_event_title "Drag and drop a reference event here"];
+  Html5.Manip.replaceChildren t.selected_events_div [create_initial_table t.selected_events_title "Drag and drop one of the events here"]
+
+let update_all_users_basket t new_users =
+  let new_basket = make_users_basket_in_div (Utils.RsvpSet.cardinal new_users) in
+  Html5.Manip.replaceChildren (Html5.Of_dom.of_element t.all_users_div) new_basket
+
+let init_all_users_div t =
+  let () = update_all_users_basket t Utils.RsvpSet.empty in
+  Utils.hidde_element t.all_users_div
+
 let create
     url_input
     db_selected_events_div
     all_users_div
-    reference_event_title reference_event_div_container reference_event_div reference_event_table
-    selected_events_title selected_events_div_container selected_events_div selected_events_table
+    reference_event_title reference_event_div_container reference_event_div
+    selected_events_title selected_events_div_container selected_events_div
     legend_div demo_text_user_container example_queries logged_user_ref play_demo_button stop_demo_button =
-  {
+  let res = {
     events_in_db_container = Events_store.create 100;
     selected_events = Events_store.create 100;
     resolved_events_cache = Events_store.create 100;
@@ -279,11 +300,9 @@ let create
     reference_event_title = reference_event_title;
     reference_event_div_container = Html5.To_dom.of_element reference_event_div_container;
     reference_event_div = reference_event_div;
-    reference_event_table = Html5.To_dom.of_element reference_event_table;
     selected_events_title = selected_events_title;
     selected_events_div_container = Html5.To_dom.of_element selected_events_div;
     selected_events_div = selected_events_div;
-    selected_events_table = Html5.To_dom.of_element selected_events_table;
     legend_div = legend_div;
     div_in_legend_div = div [];
     legend_displayed = false;
@@ -300,6 +319,10 @@ let create
     play_demo_button = play_demo_button;
     stop_demo_button = stop_demo_button;
   }
+  in
+  let () = create_initial_tables res in
+  let () = init_all_users_div res in
+  res
 
 let make_user_button t user utype text =
   let button, text, copy = make_icon_and_text ~usert:utype ~userid:(Some user.user_id) text in
@@ -617,10 +640,6 @@ let add_users_in_button_id t button_id =
   let corresponding_user = find_user t.user_sets button_id in
   Utils.RsvpSet.union t.all_users_container corresponding_user.users
 
-let update_all_users_basket t new_users =
-  let new_basket = make_users_basket_in_div (Utils.RsvpSet.cardinal new_users) in
-  Html5.Manip.replaceChildren (Html5.Of_dom.of_element t.all_users_div) new_basket
-
 let update_all_users_basket_from_button_id t button_id=
   let new_users = add_users_in_button_id t button_id in
   let () = t.all_users_container <- new_users in
@@ -640,10 +659,19 @@ let set_demo_text t texto =
   Html5.Manip.replaceChildren t.demo_text_user_container to_set
 
 let reset_ui t =
-  Events_store.clear t.selected_events;
-  t.ref_event <- `Undefined;
-  t.url_input##value <- (Js.string "");
+  let () = Events_store.clear t.selected_events in
+  let () = t.ref_event <- `Undefined in
+  let () = t.all_users_container <- Utils.RsvpSet.empty in
+  let () = t.url_input##value <- (Js.string "") in
+  let () = set_demo_text t None in
   lwt () = get_events_in_db t None in
+  let div_in_legend_div = div [] in
+  let () = Html5.Manip.replaceChildren t.legend_div [div_in_legend_div] in
+  let () = t.legend_displayed <- false in
+  let () = t.legend_buttons_to_move <- [] in
+  let () = t.buttons_to_move <- [] in
+  let () = create_initial_tables t in
   let () = refresh_ui t in
+  let () = init_all_users_div t in
   Lwt.return_unit
 }}
