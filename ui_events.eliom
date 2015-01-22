@@ -544,17 +544,20 @@ let get_events_in_db t queryo =
   let () = Utils.show_element t.example_queries in
   Lwt.return_unit
 
-let on_db_input_changes t ev _ =
-  let () = match !(t.logged_user_ref) with
-    | None -> Utils.log "ui_events: no one"
-    | Some x -> Utils.log (Printf.sprintf "ui_events: logged as %s" (x.Utils.user_id))
-  in
+let get_events_asked_by_query t =
   let queryo =
     match (Js.to_string t.url_input##value) with
       | "" -> None
       | str -> Some str
   in
   get_events_in_db t queryo
+
+let on_db_input_changes t ev _ =
+  let () = match !(t.logged_user_ref) with
+    | None -> Utils.log "ui_events: no one"
+    | Some x -> Utils.log (Printf.sprintf "ui_events: logged as %s" (x.Utils.user_id))
+  in
+  get_events_asked_by_query t
 
 let get_event_data ev data_name =
   let data_val = ev##dataTransfer##getData((Js.string data_name)) in

@@ -186,10 +186,7 @@ let rpc_event_exists =
       t.url_input##value <- Js.string "";
       Lwt.return ()
 
-   let setup t =
-    let open Lwt_js_events in
-    async (fun () ->
-           changes t.url_input (on_url_input_changes t));
-    async (fun () ->
-           clicks (Html5.To_dom.of_element t.button) (on_button_clicks t))
+   let reset_ui t =
+     t.url_input##value <- Js.string "";
+     Html5.Manip.replaceChildren t.user_container []
 }}

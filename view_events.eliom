@@ -486,6 +486,7 @@ type 'a demo_state = [
 
 type 'a ui_with_demo = {
   ui_events: 'a Ui_events.ui_events;
+  insert_events: 'a Insert.t;
   mutable demo: 'a demo_state;
 }
 
@@ -529,11 +530,15 @@ let start_demo t = `PollStartReady
 
 let stop_demo t = `PollStopReady
 
+let reset t =
+  let () = Insert.reset_ui t.insert_events in
+  Ui_events.reset_ui t.ui_events
+
 let do_start_demo t =
-  `ResetDemoInStart (Ui_events.reset_ui t.ui_events)
+  `ResetDemoInStart (reset t)
 
 let do_stop_demo t =
-  `ResetDemoInStop (Ui_events.reset_ui t.ui_events)
+  `ResetDemoInStop (reset t)
 
 let run_demo t = fun () ->
   match t.demo with
@@ -603,10 +608,11 @@ let run_demo t = fun () ->
     end
     | `Done -> ()
 
-let create ui_events =
+let create ui_events insert_events =
   let ui_with_demo =
     {
       ui_events = ui_events;
+      insert_events = insert_events;
       demo = `Start;
     }
   in
@@ -627,6 +633,13 @@ let on_play_demo_button_clicks t _ _ =
 let on_stop_demo_button_clicks t _ _ =
   t.demo <- stop_demo t;
   Lwt.return_unit
+
+let on_insert_url_input_changes t =
+  Insert.on_url_input_changes t.insert_events
+
+let on_insert_button_clicks t arg1 arg2 =
+  lwt () = Insert.on_button_clicks t.insert_events arg1 arg2 in
+  Ui_events.get_events_asked_by_query t.ui_events
 
 let setup t =
   let open Lwt_js_events in
@@ -649,6 +662,10 @@ let setup t =
          clicks (Html5.To_dom.of_element t.ui_events.Ui_events.play_demo_button) (on_play_demo_button_clicks t));
   async (fun () ->
          clicks (Html5.To_dom.of_element t.ui_events.Ui_events.stop_demo_button) (on_stop_demo_button_clicks t));
+  async (fun () ->
+         changes t.insert_events.Insert.url_input (on_insert_url_input_changes t));
+  async (fun () ->
+         clicks (Html5.To_dom.of_element t.insert_events.Insert.button) (on_insert_button_clicks t));
   ignore (Dom_html.window##setInterval(Js.wrap_callback (run_demo t),
                                        0.05 *. 1000.));
 

@@ -46,8 +46,8 @@ let view_service unused unused2 =
                                 %selected_events_title %selected_events_div_container %selected_events_div
                                 %legend_div %demo_text_user_container %example_queries %logged_userid %play_demo_button %stop_demo_button
     in
-    let () = View_events.setup (View_events.create ui_t) in
-    Insert.setup (Insert.create %insert_url %insert_button %insert_user_container %logged_userid)
+    let insert_t = Insert.create %insert_url %insert_button %insert_user_container %logged_userid in
+    View_events.setup (View_events.create ui_t insert_t)
   }}
   in
   let create_li elements =
