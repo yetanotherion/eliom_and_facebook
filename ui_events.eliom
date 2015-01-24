@@ -57,6 +57,54 @@ let make_next () =
 let make_prev () =
   span ~a:[a_id "prev"; a_class ["nvgt"]] []
 
+module DragEvents : sig
+  type event_id =
+    | HandleAdd of string
+    | Empty
+
+  val get_button_id: #Dom_html.dragEvent Js.t -> string
+  val set_button_id: #Dom_html.dragEvent Js.t -> string -> unit
+  val get_event_id_from_event: #Dom_html.dragEvent Js.t -> event_id
+  val set_event_id_to_add: #Dom_html.dragEvent Js.t -> string -> unit
+  val get_event_data: string -> #Dom_html.dragEvent Js.t -> string
+end =
+struct
+  let create_e = 'c'
+  let create_event_prefix = String.make 1 create_e
+  let event_id_attribute = "event_id"
+  let button_id_attribute = "button_id"
+
+  type event_id =
+    | HandleAdd of string
+    | Empty
+
+  let get_event_data data_name ev =
+    let data_val = ev##dataTransfer##getData((Js.string data_name)) in
+    Js.to_string data_val
+
+  let set_event_data data_name ev data_val =
+    ev##dataTransfer##setData((Js.string data_name), (Js.string data_val))
+
+  let get_event_id ev = get_event_data event_id_attribute ev
+  let set_event_id ev event_id = set_event_data event_id_attribute ev event_id
+  let set_event_id_to_add ev event_id = set_event_id ev (create_event_prefix ^ event_id)
+
+  let get_button_id ev = get_event_data button_id_attribute ev
+  let set_button_id ev event_id = set_event_data button_id_attribute ev event_id
+
+  let get_event_id_from_event event =
+    let event_id = get_event_id event in
+    if event_id = "" then Empty
+    else let c = String.get event_id 0 in
+         let length = String.length event_id in
+         let other =
+           if length = 1 then ""
+           else String.sub event_id 1 (length - 1)
+         in
+         if c = create_e then HandleAdd other
+         else raise (Failure (Printf.sprintf "event_id:%s is invalid" event_id))
+end
+
 
 module Events_store = Hashtbl.Make (struct
   type t = string
@@ -64,11 +112,11 @@ module Events_store = Hashtbl.Make (struct
   let hash = Hashtbl.hash
 end)
 
-type selected_events = [
+type selected_events_resolution_status = [
 | `Resolved of Utils.event_and_users
 | `Resolving of Utils.event ]
 
-type reference_event = [
+type reference_event_resolution_status = [
 | `Undefined
 | `Resolving of (Utils.event * Utils.user_containers)
 | `Resolved of (Utils.event_and_users * Utils.user_containers)
@@ -91,9 +139,6 @@ let create_user_sets () = {
 
 let common_users l1 l2 =
   Utils.RsvpSet.inter (Utils.make_rsvp_set l1) (Utils.make_rsvp_set l2)
-
-let get_button_id user_set =
-  Printf.sprintf "_userbox-%d" user_set.user_id
 
 let append_new_user_set user_sets users =
   let new_user = {
@@ -123,8 +168,8 @@ let make_selectable_event x =
  let res_dom = Html5.To_dom.of_element res in
  let open Lwt_js_events in
  let ondragstarts ev _ =
-   let event_id = x.Utils.url in
-   ev##dataTransfer##setData((Js.string "event_id"), (Js.string event_id));
+   Utils.log ("dragstarts selectable event:" ^ x.Utils.url);
+   let () = DragEvents.set_event_id_to_add ev x.Utils.url in
    Lwt.return_unit
  in
  Lwt.async (fun () -> dragstarts res_dom ondragstarts);
@@ -148,7 +193,7 @@ type 'a one_legend_button_move = {
 
 type 'a ui_events = {
   events_in_db_container: Utils.event Events_store.t;
-  selected_events: (selected_events * Utils.user_containers) Events_store.t;
+  selected_events: (selected_events_resolution_status * Utils.user_containers) Events_store.t;
   resolved_events_cache: Utils.event_and_users Events_store.t;
   nb_event_per_request: int;
   url_input: Dom_html.inputElement Js.t;
@@ -163,7 +208,7 @@ type 'a ui_events = {
   legend_div: 'a Eliom_content.Html5.elt;
   mutable div_in_legend_div: 'a Eliom_content.Html5.elt;
   mutable legend_displayed: bool;
-  mutable ref_event: reference_event;
+  mutable ref_event: reference_event_resolution_status;
   mutable user_sets: user_sets;
   mutable curr_offset: Int32.t;
   mutable curr_query: string option;
@@ -270,9 +315,14 @@ let create_initial_table header message =
       in
       td [pcdata text]) six)]
 
+let create_initial_select_event_table t =
+  create_initial_table t.selected_events_title "Drag and drop one of the events here"
+let create_initial_ref_event_table t =
+  create_initial_table t.reference_event_title "Drag and drop a reference event here"
+
 let create_initial_tables t =
-  Html5.Manip.replaceChildren t.reference_event_div [create_initial_table t.reference_event_title "Drag and drop a reference event here"];
-  Html5.Manip.replaceChildren t.selected_events_div [create_initial_table t.selected_events_title "Drag and drop one of the events here"]
+  Html5.Manip.replaceChildren t.reference_event_div [create_initial_ref_event_table t];
+  Html5.Manip.replaceChildren t.selected_events_div [create_initial_select_event_table t]
 
 let update_all_users_basket t new_users =
   let new_basket = make_users_basket_in_div (Utils.RsvpSet.cardinal new_users) in
@@ -324,14 +374,20 @@ let create
   let () = init_all_users_div res in
   res
 
+let add_selected_event t event_url status user_container =
+  Events_store.add t.selected_events event_url (status, user_container)
+
+let update_selected_event_status t event_url new_status user_container =
+  let () = Events_store.remove t.selected_events event_url in
+  add_selected_event t event_url new_status user_container
+
 let make_user_button t user utype text =
   let button, text, copy = make_icon_and_text ~usert:utype ~userid:(Some user.user_id) text in
   let res = div [button; copy; text] in
   let res_dom = Html5.To_dom.of_element res in
   let open Lwt_js_events in
   let ondragstarts ev _ =
-    let user_id = Printf.sprintf "%d" user.user_id in
-    ev##dataTransfer##setData((Js.string "button_id"), (Js.string user_id));
+    let () = DragEvents.set_button_id ev (Printf.sprintf "%d" user.user_id) in
     Lwt.return_unit
   in
   Lwt.async (fun () -> dragstarts res_dom ondragstarts);
@@ -397,11 +453,9 @@ let resolve_event t event user_containers =
  let event_ref = ref None in
  let must x = match x with | None -> assert(false) | Some x -> x in
  lwt () = process_event t event user_containers event_ref in
- let () = Events_store.remove t.selected_events event.Utils.url in
  let () = Events_store.remove t.resolved_events_cache event.Utils.url in
  let resolved_event = must !event_ref in
- let () = Events_store.add t.selected_events event.Utils.url (`Resolved resolved_event,
-                                                              user_containers) in
+ let () = update_selected_event_status t event.Utils.url (`Resolved resolved_event) user_containers in
  let () = Events_store.add t.resolved_events_cache event.Utils.url resolved_event in
  Lwt.return_unit
 
@@ -559,12 +613,71 @@ let on_db_input_changes t ev _ =
   in
   get_events_asked_by_query t
 
-let get_event_data ev data_name =
-  let data_val = ev##dataTransfer##getData((Js.string data_name)) in
-  Js.to_string data_val
+module type DragDestination = sig
+  type elt
+  val refresh_ui_after_removal: bool
+  val get_table_title: 'a ui_events -> string
+  val get_elt_container: elt -> Utils.user_containers
+  val remove_element: 'a ui_events -> string -> unit
+  val get_div: 'a ui_events -> 'a Eliom_content.Html5.elt
+  val create_initial_table: 'a ui_events -> [> Html5_types.tablex ] Eliom_content.Html5.D.elt
+  val get_all_related_element_containers: 'a ui_events -> (string * Utils.user_containers) list
+end
 
-let get_event_id ev = get_event_data ev "event_id"
-let get_button_id ev = get_event_data ev "button_id"
+module DragIntoTable (M: DragDestination) = struct
+
+  let make_delete_icon f t url =
+    let cross_hover = [Utils.make_cross_hover ()] in
+    let cross = [Utils.make_cross ()] in
+    let d = div cross in
+    let on_mousovers _ _ =
+      let () = Html5.Manip.replaceChildren d cross_hover in
+      Lwt.return_unit
+    in
+    let on_mouseouts _ _ =
+      let () = Html5.Manip.replaceChildren d cross in
+      Lwt.return_unit
+    in
+    let dom_d = Html5.To_dom.of_element d in
+    let open Lwt_js_events in
+        let () = async (fun () -> clicks dom_d
+          (fun _ _ ->
+            let () = f t url in
+            Lwt.return_unit))
+        in
+        let () = async (fun () -> mouseovers dom_d on_mousovers) in
+        let () = async (fun () -> mouseouts dom_d on_mouseouts) in
+        d
+
+  let rec refresh_events_table t =
+    let make_img = make_delete_icon (fun t url ->
+      let () = M.remove_element t url in
+      let () = refresh_events_table t in
+      if M.refresh_ui_after_removal then refresh_ui t) t
+    in
+    let setup_tr url elt_container =
+      let img = make_img url in
+      tr ~a:[a_id url] (Utils.integrate_user_containers_in_td elt_container img)
+    in
+    let trs = List.map (fun (url, elt) -> setup_tr url elt) (M.get_all_related_element_containers t) in
+    let table =
+      match trs with
+        | [] -> M.create_initial_table t
+        | _ -> Utils.make_complete_event_table ~caption:(Some (M.get_table_title t)) trs
+    in
+    Html5.Manip.replaceChildren (M.get_div t) [table]
+end
+
+module SelectEventsDropHandler = DragIntoTable (struct
+  type elt = selected_events_resolution_status * Utils.user_containers
+  let refresh_ui_after_removal = false
+  let get_elt_container (_, container) = container
+  let get_table_title t = t.selected_events_title
+  let get_all_related_element_containers t = Events_store.fold (fun k (elt, c) res -> (k, c) :: res) t.selected_events []
+  let remove_element t url = Events_store.remove t.selected_events url
+  let get_div t = t.selected_events_div
+  let create_initial_table t = create_initial_select_event_table t
+end)
 
 let drop_event_id_in_selected_events t event_id =
   (* create the UI elements for new selected elements
@@ -577,19 +690,14 @@ let drop_event_id_in_selected_events t event_id =
       let () = Utils.replace_event_user_containers event user_containers in
       match Events_store.mem t.resolved_events_cache event_id with
         | false -> let () = to_resolve_lwt:= Some (resolve_event t event user_containers) in
-                   Events_store.add t.selected_events event.Utils.url ((`Resolving event, user_containers))
+                   add_selected_event t event.Utils.url (`Resolving event) user_containers
         | true -> let resolved_event = Events_store.find t.resolved_events_cache event_id in
-                  Events_store.add t.selected_events event.Utils.url ((`Resolved resolved_event, user_containers))
+                  add_selected_event t event.Utils.url (`Resolved resolved_event) user_containers
     end
     | true -> () in
     (* display the UI with temporarily non available data *)
-  let trs = ref [] in
-  let () = Events_store.iter (fun url (_, s) ->
-    trs:= tr ~a:[a_id url] (Utils.integrate_user_containers_in_td s) :: !trs)
-    t.selected_events in
-  let table = Utils.make_complete_event_table ~caption:(Some t.selected_events_title) !trs in
-  Html5.Manip.replaceChildren t.selected_events_div [table];
     (* wait for the resolution of FB requests *)
+  let () = SelectEventsDropHandler.refresh_events_table t in
   lwt () = match !to_resolve_lwt with
     | None -> Lwt.return_unit
     | Some x -> x
@@ -600,7 +708,25 @@ let drop_event_id_in_selected_events t event_id =
 
 let on_user_drop_in_selected_events t ev _ =
   Dom.preventDefault ev;
-  drop_event_id_in_selected_events t (get_event_id ev)
+  let open DragEvents in
+  match get_event_id_from_event ev with
+    | Empty -> Lwt.return_unit
+    | HandleAdd event_id -> drop_event_id_in_selected_events t event_id
+
+module ReferenceEventDropHandler = DragIntoTable (struct
+  type elt = reference_event_resolution_status * Utils.user_containers
+  let refresh_ui_after_removal = true
+  let get_elt_container (_, container) = container
+  let get_table_title t = t.reference_event_title
+  let get_all_related_element_containers t =
+    match t.ref_event with
+      | `Undefined -> []
+      | `Resolving (_, c) -> [("", c)]
+      | `Resolved (_, c) -> [("", c)]
+  let remove_element t _ = t.ref_event <- `Undefined
+  let get_div t = t.reference_event_div
+  let create_initial_table t = create_initial_ref_event_table t
+end)
 
 let drop_event_id_in_reference_event t event_id =
   let to_resolve_lwt = ref None in
@@ -634,14 +760,7 @@ let drop_event_id_in_reference_event t event_id =
       else create_new_ref_event ()
   in
   (* display the UI with, maybe, temporarily non available data *)
-  let id, user_container = match t.ref_event with
-    | `Undefined -> assert(false)
-    | `Resolved (r, s) -> (r.Utils.ev_url, s)
-    | `Resolving (r, s) -> (r.Utils.url, s)
-  in
-  let trs = [tr ~a:[a_id id] (Utils.integrate_user_containers_in_td user_container)] in
-  let table = Utils.make_complete_event_table ~caption:(Some t.reference_event_title) trs in
-  Html5.Manip.replaceChildren t.reference_event_div [table];
+  let () = ReferenceEventDropHandler.refresh_events_table t in
   (* wait for the resolution of FB requests *)
   lwt () = match !to_resolve_lwt with | None -> Lwt.return_unit | Some x -> x in
   (* compute differences *)
@@ -650,7 +769,10 @@ let drop_event_id_in_reference_event t event_id =
 
 let on_user_drop_in_ref_event t ev _ =
   Dom.preventDefault ev;
-  drop_event_id_in_reference_event t (get_event_id ev)
+  let open DragEvents in
+  match get_event_id_from_event ev with
+    | Empty -> Lwt.return_unit
+    | HandleAdd event_id -> drop_event_id_in_reference_event t event_id
 
 let add_users_in_button_id t button_id =
   let corresponding_user = find_user t.user_sets button_id in
@@ -663,8 +785,11 @@ let update_all_users_basket_from_button_id t button_id=
 
 let on_all_users_div_drop t ev _ =
   Dom.preventDefault ev;
-  let button_id = int_of_string (get_button_id ev) in
-  let () = update_all_users_basket_from_button_id t button_id in
+  let () = match DragEvents.get_button_id ev with
+    |"" -> ()
+    | _ -> let button_id = int_of_string (DragEvents.get_button_id ev) in
+           update_all_users_basket_from_button_id t button_id
+  in
   Lwt.return_unit
 
 let set_demo_text t texto =

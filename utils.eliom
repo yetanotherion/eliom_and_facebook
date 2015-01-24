@@ -20,7 +20,6 @@
     mutable nb_event_added: int;
   }
 
-
   type event_user = String.t * String.t
   module RsvpSet = Set.Make (
     struct
@@ -62,6 +61,17 @@
     make_table ~caption:None ["Name"; "Owner";
                               "Location"; "Start_time";
                               "rsvp_info"] data
+  let cross_size = [a_height 20; a_width 20]
+  let make_cross () =
+    img ~src:(uri_of_string (fun () -> "imgs/cross.png"))
+      ~a:cross_size
+      ~alt:"close" ()
+
+  let make_cross_hover () =
+    img ~src:(uri_of_string (fun () -> "imgs/cross_hover.png"))
+      ~a:cross_size
+      ~alt:"close" ()
+
 
   let make_complete_event_table ?caption:(c=None) data =
     make_table ~caption:c ["Name"; "Owner";
@@ -176,7 +186,6 @@ function getOffsetRect(elem) {
     fjs
 
   let init () =
-    log "in init";
     Fb.init { Fb.appId = "534442833338989";
               Fb.cookie = true;
 	      Fb.xfbml = false;
@@ -327,14 +336,17 @@ function getOffsetRect(elem) {
     invited_user_container = make_wait_user_container ();
   }
 
-  let integrate_user_containers_in_td user_containers =
+  let integrate_user_containers_in_td user_containers cross =
     make_tds [user_containers.event_name_user_container;
               user_containers.event_owner_user_container;
               user_containers.event_venue_user_container;
               user_containers.event_start_time_user_container;
               user_containers.attending_user_container;
               user_containers.declined_user_container;
-              user_containers.invited_user_container]
+              user_containers.invited_user_container;
+              cross]
+
+
 
   let process_event_answer url res =
       match res with

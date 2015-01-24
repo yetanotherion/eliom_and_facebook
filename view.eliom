@@ -22,10 +22,10 @@ let view_service unused unused2 =
   let legend_div = div [] in
   let play_demo_button = button ~a:[a_class ["hidden"; "btn"; "btn-lg"; "btn-primary"]] ~button_type:`Button [pcdata "Play demo"] in
   let stop_demo_button = button ~a:[a_class ["hidden"; "btn"; "btn-lg"; "btn-primary"]] ~button_type:`Button [pcdata "Stop demo"] in
-  let user_select_ui_div = div ~a:[a_class ["span7"]] [all_users_div;
-                                                        selected_events_div_container;
-                                                        reference_event_div_container;
-                                                        table (tr [td [legend_div]; td [play_demo_button; stop_demo_button]]) [];
+  let user_select_ui_div = div ~a:[a_class ["span8"]] [all_users_div;
+                                                       selected_events_div_container;
+                                                       reference_event_div_container;
+                                                       table (tr [td [legend_div]; td [play_demo_button; stop_demo_button]]) [];
                                                        ] in
   let url_input = string_input ~input_type:`Text () in
   let example_queries = div ~a:[a_class ["hidden"]] [pcdata "Some search query examples:";
