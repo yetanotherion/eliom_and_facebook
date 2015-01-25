@@ -230,7 +230,7 @@ function getOffsetRect(elem) {
     let f res =
       Lwt.wakeup fwakener res
     in
-    let () = Fb.api_profile url f in
+    let () = Fb.api url f in
     api
 
   let lwt_autologin () =
@@ -245,22 +245,25 @@ function getOffsetRect(elem) {
     lwt () = lwt_autologin () in
     match !logged_user_ref with
       | None -> begin
-        lwt res = lwt_get_me () in
-        let () = logged_user_ref := Some {user_id=res.Fb.profile_id;
-                                          user_name=res.Fb.profile_name;
-                                          nb_event_added=0} in
-        Lwt.return_unit
+        match_lwt lwt_get_me () with
+          | Fb.Nok _ | Fb.EvData _ | Fb.EvOk _ -> Lwt.fail (Failure "error in getting current profile")
+          | Fb.ProfileOk res -> begin
+            logged_user_ref := Some {user_id=res.Fb.profile_id;
+                                     user_name=res.Fb.profile_name;
+                                     nb_event_added=0};
+            Lwt.return_unit
+          end
         end
       | Some _ -> Lwt.return_unit
 
-  let lwt_api_event logged_user_ref url =
+  let lwt_api logged_user_ref url =
     let url = "v2.0/" ^ url in
     let api, fwakener = Lwt.wait () in
     let f res =
       Lwt.wakeup fwakener res
     in
     lwt () = get_user_id logged_user_ref in
-    Fb.api_event url f;
+    Fb.api url f;
     api
 
   let get_city event =
@@ -278,15 +281,15 @@ function getOffsetRect(elem) {
     let next_char_idx = (String.index string c) + 1 in
     String.sub string next_char_idx ((String.length string) - next_char_idx)
 
+  let error_to_str error =
+    Printf.sprintf "Invalid event, got error {message:%s, error_type: %s, code: %d}" error.Fb.message error.Fb.error_type error.Fb.code
+
   let rec gather_all_users logged_user_ref url res =
-    match_lwt (lwt_api_event logged_user_ref url) with
-      | Fb.Nok error -> begin
-        raise_lwt (Failure "error")
+    match_lwt (lwt_api logged_user_ref url) with
+      | Fb.Nok error ->  begin raise_lwt (Failure ("got error: " ^ (error_to_str error)))
       end
-      | Fb.Ok _ -> begin
-        raise_lwt (Failure "unexpected")
-      end
-      | Fb.Data (d, cursor) ->
+      | Fb.ProfileOk _ | Fb.EvOk _ -> begin raise_lwt (Failure "unexpected answer") end
+      | Fb.EvData (d, cursor) ->
         let current_res = List.map extract_user (Array.to_list d) in
         let new_res = res @ current_res in
         match cursor.Fb.next with
@@ -354,12 +357,15 @@ function getOffsetRect(elem) {
   let process_event_answer url res =
       match res with
         | Fb.Nok error -> begin
-          `Err [div [pcdata (Printf.sprintf "Invalid event, got error {message:%s, error_type: %s, code: %d}" error.Fb.message error.Fb.error_type error.Fb.code)]]
+          `Err [div [pcdata (error_to_str error)]]
         end
-        | Fb.Data _ -> begin
-          `Err [div [pcdata (Printf.sprintf "Invalid event, got data instead of event elements")]]
+        | Fb.ProfileOk _ -> begin
+          `Err [div [pcdata "Invalid event, got answer related to a profile"]]
         end
-        | Fb.Ok event -> `Ok event
+        | Fb.EvData _ -> begin
+          `Err [div [pcdata "Invalid event, got data instead of event elements"]]
+        end
+        | Fb.EvOk event -> `Ok event
 
   let replace_event_user_containers event user_containers =
     List.iter (fun (user_container, value) ->

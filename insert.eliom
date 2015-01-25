@@ -153,7 +153,7 @@ let rpc_event_exists =
      try_lwt begin
        match_lwt %rpc_event_exists input_text with
          | None -> begin
-           lwt res = Utils.lwt_api_event t.logged_user_ref input_text in
+           lwt res = Utils.lwt_api t.logged_user_ref input_text in
            lwt () = process_res t res in
            Lwt.return_unit
          end

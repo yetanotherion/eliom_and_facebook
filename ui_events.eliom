@@ -430,7 +430,7 @@ let display_rsvp t users user_container =
 let process_event t event user_containers user_ref =
  try_lwt
   let event_url = event.Utils.url in
-  lwt res = Utils.lwt_api_event t.logged_user_ref event_url in
+  lwt res = Utils.lwt_api t.logged_user_ref event_url in
   match (Utils.process_event_answer event.Utils.url res) with
     | `Err x -> begin
       Html5.Manip.replaceChildren user_containers.Utils.event_name_user_container x;
