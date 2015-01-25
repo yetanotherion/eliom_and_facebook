@@ -42,7 +42,7 @@ let rpc_event_exists =
 
   let make_jsonable_event url fb_event attending declined invited = {
     url = url;
-    location = fb_event.Fb.venue.Fb.city;
+    location = Utils.get_city fb_event;
     (* we can only set it in the server
        as date conversion methods are not available in
        js_of_eliom. we carry that parameter until we reach
@@ -63,7 +63,7 @@ let rpc_event_exists =
   let make_event_display_line event attending_user_container declined_user_container invited_user_container =
     Utils.make_tds [pcdata event.Fb.name;
                     pcdata event.Fb.owner.Fb.name;
-                    pcdata event.Fb.venue.Fb.city;
+                    pcdata (Utils.get_city event);
                     pcdata (shorten_date event.Fb.start_time);
                     div [attending_user_container;
                          declined_user_container;

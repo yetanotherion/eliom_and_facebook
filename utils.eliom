@@ -263,10 +263,13 @@ function getOffsetRect(elem) {
     Fb.api_event url f;
     api
 
+  let get_city event =
+    match event.Fb.venue with | None -> "" | Some x -> x.Fb.city
+
   let print_event event wait_msg_user_containers =
     let tds = [td [pcdata event.Fb.name];
                td [pcdata event.Fb.owner.Fb.name];
-               td [pcdata event.Fb.venue.Fb.city];
+               td [pcdata (get_city event)];
                td [pcdata (epoch_to_light_date (to_epoch event.Fb.start_time))]]
               @ (List.map (fun x -> td [x]) wait_msg_user_containers) in
     tr tds
