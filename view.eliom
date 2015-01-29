@@ -22,7 +22,7 @@ let view_service unused unused2 =
   let legend_div = div [] in
   let play_demo_button = button ~a:[a_class ["hidden"; "btn"; "btn-lg"; "btn-primary"]] ~button_type:`Button [pcdata "Play demo"] in
   let stop_demo_button = button ~a:[a_class ["hidden"; "btn"; "btn-lg"; "btn-primary"]] ~button_type:`Button [pcdata "Stop demo"] in
-  let user_select_ui_div = div ~a:[a_class ["span8"]] [all_users_div;
+  let user_select_ui_div = div ~a:[a_class ["col-md-8"]] [all_users_div;
                                                        selected_events_div_container;
                                                        reference_event_div_container;
                                                        table (tr [td [legend_div]; td [play_demo_button; stop_demo_button]]) [];
@@ -67,18 +67,23 @@ let view_service unused unused2 =
                   demo_text_user_container;
                   div ~a:[a_class ["container-fluid"]]
                     [div ~a:[a_class ["row-fluid"]]
-                        [div ~a:[a_class ["span4"]] [div ~a:[a_class ["well"; "sidebar-nav"]] (List.append insert_part search_part)];
+                        [div ~a:[a_class ["col-md-4"]] [div ~a:[a_class ["well"; "sidebar-nav"]] (List.append insert_part search_part)];
                          select_part]]] in
-  let b = all_body @ Utils.bs_scripts in
-  let h = Utils.bootstrap_metas @ Utils.bs_icons in
+  let b = all_body in
+  let utf8_meta = meta ~a:[a_charset "utf8"] () in
+  let viewport_meta = meta ~a:[a_name "viewport";
+                               a_content "width=device-width, initial-scale=1"] () in
+  let href_link = uri_of_string (fun () -> "http://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css") in
+  let stylesheet = link ~rel:[`Stylesheet] ~href:href_link () in
+  let make_script x = script ~a:[a_src (uri_of_string (fun () -> x))] (pcdata "") in
+  let js_scripts = List.map make_script ["https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js";
+                                         "http://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"] in
+  let h = [utf8_meta;
+           viewport_meta;
+           stylesheet] @ js_scripts in
   Lwt.return (Eliom_tools.D.html ~title: "advertise your event"
-                ~css:[["css"; "bootstrap.min.css"];
-                      ["css"; "mb.css"];
+                ~css:[["css"; "mb.css"];
                       ["css"; "mb-view.css"];
-                      ["css"; "bootstrap-responsive.css"];
-                      ["css"; "signin.css"];
                       ["css"; "bubbles.css"]]
-                ~js:[["js"; "jquery.min.js"];
-                     ["js"; "bootstrap.min.js"]]
                 (body b)
                 ~other_head:h)
