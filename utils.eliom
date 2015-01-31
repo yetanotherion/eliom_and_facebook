@@ -53,7 +53,7 @@
     let curr_table =
       match table_caption with
         | None -> tablex ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody]
-        | Some x -> tablex ~caption:(caption [pcdata x]) ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody]
+        | Some x -> tablex ~caption:(caption [h3 [pcdata x]]) ~thead:curr_thead ~a:[a_class ["table"; "table-striped"]] [curr_tbody]
     in
     curr_table
 
