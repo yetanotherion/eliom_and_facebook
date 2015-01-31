@@ -14,12 +14,6 @@
     nb_invited: int;
   }
 
-  type application_user = {
-    user_id: string;
-    user_name: string;
-    mutable nb_event_added: int;
-  }
-
   type event_user = String.t * String.t
   module RsvpSet = Set.Make (
     struct
@@ -241,28 +235,29 @@ function getOffsetRect(elem) {
         end
       | false -> Lwt.return_unit
 
-  let get_user_id logged_user_ref =
-    lwt () = lwt_autologin () in
-    match !logged_user_ref with
+  let get_user_id () =
+    lwt user_ref = %Server_state.rpc_get_user_of_the_session () in
+    match user_ref with
       | None -> begin
+        lwt () = lwt_autologin () in
         match_lwt lwt_get_me () with
           | Fb.Nok _ | Fb.EvData _ | Fb.EvOk _ -> Lwt.fail (Failure "error in getting current profile")
           | Fb.ProfileOk res -> begin
-            logged_user_ref := Some {user_id=res.Fb.profile_id;
-                                     user_name=res.Fb.profile_name;
-                                     nb_event_added=0};
-            Lwt.return_unit
+            let res = {Server_state.user_id=res.Fb.profile_id;
+                       Server_state.user_name=res.Fb.profile_name;
+                       Server_state.nb_event_added=0} in
+            lwt () = %Server_state.rpc_set_user_of_the_session (Server_state.to_json res) in
+            Lwt.return res
           end
         end
-      | Some _ -> Lwt.return_unit
+      | Some x -> Lwt.return x
 
-  let lwt_api logged_user_ref url =
+  let lwt_api url =
     let url = "v2.0/" ^ url in
     let api, fwakener = Lwt.wait () in
     let f res =
       Lwt.wakeup fwakener res
     in
-    lwt () = get_user_id logged_user_ref in
     Fb.api url f;
     api
 
@@ -284,8 +279,8 @@ function getOffsetRect(elem) {
   let error_to_str error =
     Printf.sprintf "Invalid event, got error {message:%s, error_type: %s, code: %d}" error.Fb.message error.Fb.error_type error.Fb.code
 
-  let rec gather_all_users logged_user_ref url res =
-    match_lwt (lwt_api logged_user_ref url) with
+  let rec gather_all_users url res =
+    match_lwt (lwt_api url) with
       | Fb.Nok error ->  begin raise_lwt (Failure ("got error: " ^ (error_to_str error)))
       end
       | Fb.ProfileOk _ | Fb.EvOk _ -> begin raise_lwt (Failure "unexpected answer") end
@@ -296,16 +291,16 @@ function getOffsetRect(elem) {
           | None -> Lwt.return new_res
           | Some x ->
             let next_param = substring_after_char x '?' in
-            gather_all_users logged_user_ref (Printf.sprintf "%s?%s" url next_param) new_res
+            gather_all_users (Printf.sprintf "%s?%s" url next_param) new_res
 
-  let process_rsvp logged_user_ref url users_name =
-   lwt all_users = gather_all_users logged_user_ref (url ^ "/" ^ users_name) [] in
+  let process_rsvp url users_name =
+   lwt all_users = gather_all_users (url ^ "/" ^ users_name) [] in
    Lwt.return all_users
 
-  let process_all_rsvp logged_user_ref url =
-    lwt attending = process_rsvp logged_user_ref url "attending" in
-    lwt declined = process_rsvp logged_user_ref url "declined" in
-    lwt invited = try_lwt process_rsvp logged_user_ref url "invited" with _ -> Lwt.return [] in
+  let process_all_rsvp url =
+    lwt attending = process_rsvp url "attending" in
+    lwt declined = process_rsvp url "declined" in
+    lwt invited = try_lwt process_rsvp url "invited" with _ -> Lwt.return [] in
     Lwt.return (attending, declined, invited)
 
   let display_rsvp label users user_container =

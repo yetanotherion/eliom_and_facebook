@@ -480,8 +480,6 @@ type 'a demo_state = [
 | `Start
 | `MakeUserLog of unit Lwt.t
 | `DisplayDb of unit Lwt.t
-| `CheckUserExists of Utils.application_user option Lwt.t
-| `RegisterUser of unit Lwt.t
 | `PollStartReady
 | `DoDemo of 'a demo_move_type list
 | `PollStopReady
@@ -489,6 +487,7 @@ type 'a demo_state = [
 | `ResetDemoInStart of unit Lwt.t
 | `ResetDemoInStopEnd
 | `Done
+| `NotLogged
 ]
 
 type 'a ui_with_demo = {
@@ -497,17 +496,6 @@ type 'a ui_with_demo = {
   mutable demo: 'a demo_state;
 }
 
-
-let make_jsonable_user user_id username = {
-  Users.user_id = user_id;
-  Users.user_name = username;
-  Users.nb_event_added = 0;
-}
-
-let must_get_user t =
-  match !(t.ui_events.Ui_events.logged_user_ref) with
-    | None -> assert(false)
-    | Some x -> x
 
 let create_moves () =
   let () = Random.self_init () in
@@ -549,35 +537,16 @@ let do_stop_demo t =
 
 let run_demo t = fun () ->
   match t.demo with
-    | `Start -> begin t.demo <- `MakeUserLog (Utils.get_user_id t.ui_events.Ui_events.logged_user_ref) end
+    | `Start -> t.demo <- `MakeUserLog (Login.setup_user_in_session t.ui_events.Ui_events.logged_user)
     | `MakeUserLog lt -> begin
       match Lwt.state lt with
-        | Lwt.Return () -> begin t.demo <- `DisplayDb (Ui_events.get_events_in_db t.ui_events None) end
+        | Lwt.Return () -> t.demo <- `DisplayDb (Ui_events.get_events_in_db t.ui_events None)
+        | Lwt.Fail _ -> t.demo <- `NotLogged
         | _ -> ()
     end
     | `DisplayDb lt -> begin
       match Lwt.state lt with
-        | Lwt.Return () -> begin
-          let user = must_get_user t in
-          t.demo <- `CheckUserExists (%Users.rpc_user_exists user.Utils.user_id)
-        end
-        | _ -> ()
-    end
-    | `CheckUserExists lt -> begin
-      match Lwt.state lt with
-        | Lwt.Return x -> begin
-          match x with
-            | None -> begin
-              let user = must_get_user t in
-              t.demo <- `RegisterUser (%Users.rpc_insert_user (make_jsonable_user user.Utils.user_id user.Utils.user_name))
-            end
-            | Some _ -> begin t.demo <- `ResetDemoInStopEnd end
-        end
-        | _ -> ()
-    end
-    | `RegisterUser lt -> begin
-      match Lwt.state lt with
-        | Lwt.Return _ -> begin t.demo <- start_demo t end
+        | Lwt.Return () -> t.demo <- `ResetDemoInStopEnd
         | _ -> ()
     end
     | `PollStartReady -> begin
@@ -614,6 +583,7 @@ let run_demo t = fun () ->
       t.demo <- `Done
     end
     | `Done -> ()
+    | `NotLogged -> ()
 
 let create ui_events insert_events =
   let ui_with_demo =

@@ -9,8 +9,6 @@ let create_input_header x = h3 [pcdata x]
 let view_service unused unused2 =
   let db_selected_events_div = div [] in
 
-  (* XXX need to implement it with an rpc that sets an Eliom_reference accordingly *)
-  let logged_userid = (ref None: (Utils.application_user option ref)) in
   let selected_events_title = "Selected events" in
   let reference_event_title = "Reference event" in
   let selected_events_div = div [] in
@@ -39,16 +37,16 @@ let view_service unused unused2 =
   let insert_button = button ~a:[a_class ["hidden"; "btn"; "btn-lg"; "btn-primary"]] ~button_type:`Button [pcdata "Record"] in
   let insert_user_container = div [] in
   let _ = {unit{
+    let login = Login.create () in
     let ui_t = Ui_events.create %url_input %db_selected_events_div
                                 %all_users_div
                                 %reference_event_title %reference_event_div_container %reference_event_div
                                 %selected_events_title %selected_events_div_container %selected_events_div
-                                %legend_div %demo_text_user_container %example_queries %logged_userid %play_demo_button %stop_demo_button
+                                %legend_div %demo_text_user_container %example_queries %play_demo_button %stop_demo_button login
     in
-    let insert_t = Insert.create %insert_url %insert_button %insert_user_container %logged_userid in
+    let insert_t = Insert.create %insert_url %insert_button %insert_user_container login in
     View_events.setup (View_events.create ui_t insert_t)
-  }}
-  in
+  }} in
   let create_li elements =
     let lis = List.map (fun (el, attr) -> li ~a:attr [el]) elements in
     [ul ~a:[a_class ["nav"; "nav-list"]] lis]

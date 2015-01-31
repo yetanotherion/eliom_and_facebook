@@ -57,10 +57,9 @@ let make_event event_db =
       }
 
 let make_user user_db =
-  let open Utils in
-  {user_id = user_db#!id;
-   user_name = user_db#!name;
-   nb_event_added = Int32.to_int user_db#!nb_event_added}
+  {Server_state.user_id = user_db#!id;
+   Server_state.user_name = user_db#!name;
+   Server_state.nb_event_added = Int32.to_int user_db#!nb_event_added}
 
 let get_event url =
   lwt dbh = get_db () in
@@ -93,7 +92,7 @@ let do_insert_event event =
                           nb_invited = $int32:Int32.of_int event.nb_invited$
                          } >>
 let do_insert_user user =
-  let open Utils in
+  let open Server_state in
   lwt dbh = get_db () in
   Lwt_Query.query dbh
    <:insert< $users$ := {id = $string:user.user_id$;
@@ -110,7 +109,7 @@ let insert_event event =
     | Some hd -> Lwt.return (Some hd)
 
 let insert_user user =
-  match_lwt (get_user user.Utils.user_id) with
+  match_lwt (get_user user.Server_state.user_id) with
     | None -> begin
       lwt _ = do_insert_user user in
       Lwt.return_unit
@@ -118,7 +117,7 @@ let insert_user user =
     | Some _ -> Lwt.return_unit
 
 let update_user_nb_event userid nb_event =
-  let open Utils in
+  let open Server_state in
   lwt dbh = get_db () in
   Lwt_Query.query dbh
    <:update< t in $users$ := {nb_event_added = $int32:Int32.of_int nb_event$}

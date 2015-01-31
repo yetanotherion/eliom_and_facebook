@@ -223,10 +223,11 @@ type 'a ui_events = {
   mutable all_users_container: Utils.RsvpSet.t;
   demo_text_user_container: 'a Eliom_content.Html5.elt;
   example_queries: Dom_html.element Js.t;
-  logged_user_ref: Utils.application_user option ref;
   play_demo_button: 'a Eliom_content.Html5.elt;
   stop_demo_button: 'a Eliom_content.Html5.elt;
+  logged_user: Login.t;
 }
+
 
 let append_legend_button_move_from_icon_type icon icon_copy icon_type all_buttons =
   let to_append = match icon_type with
@@ -352,7 +353,7 @@ let create
     all_users_div
     reference_event_title reference_event_div_container reference_event_div
     selected_events_title selected_events_div_container selected_events_div
-    legend_div demo_text_user_container example_queries logged_user_ref play_demo_button stop_demo_button =
+    legend_div demo_text_user_container example_queries play_demo_button stop_demo_button logged_user =
   let res = {
     events_in_db_container = Events_store.create 100;
     selected_events = Events_store.create 100;
@@ -379,9 +380,9 @@ let create
     all_users_container = Utils.RsvpSet.empty;
     demo_text_user_container = demo_text_user_container;
     example_queries = Html5.To_dom.of_element example_queries;
-    logged_user_ref = logged_user_ref;
     play_demo_button = play_demo_button;
     stop_demo_button = stop_demo_button;
+    logged_user = logged_user;
   }
   in
   let () = create_initial_tables res in
@@ -444,7 +445,7 @@ let display_rsvp t users user_container =
 let process_event t event user_containers user_ref =
  try_lwt
   let event_url = event.Utils.url in
-  lwt res = Utils.lwt_api t.logged_user_ref event_url in
+  lwt res = Login.logged_lwt_api t.logged_user event_url in
   match (Utils.process_event_answer event.Utils.url res) with
     | `Err x -> begin
       Html5.Manip.replaceChildren user_containers.Utils.event_name_user_container x;
@@ -452,7 +453,7 @@ let process_event t event user_containers user_ref =
     end
     | `Ok event -> begin
       (* XXX check whether db value should be updated and update it if so*)
-      lwt (attending, declined, invited) = Utils.process_all_rsvp t.logged_user_ref event_url in
+      lwt (attending, declined, invited) = Login.logged_process_all_rsvp t.logged_user event_url in
       let resolved_event = Utils.make_event_and_users event_url event attending declined invited in
       user_ref := Some resolved_event;
       Lwt.return_unit
@@ -620,10 +621,6 @@ let get_events_asked_by_query t =
   get_events_in_db t queryo
 
 let on_db_input_changes t ev _ =
-  let () = match !(t.logged_user_ref) with
-    | None -> Utils.log "ui_events: no one"
-    | Some x -> Utils.log (Printf.sprintf "ui_events: logged as %s" (x.Utils.user_id))
-  in
   get_events_asked_by_query t
 
 module type DragDestination = sig
