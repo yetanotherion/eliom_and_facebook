@@ -65,7 +65,7 @@ let view_service unused unused2 =
                   demo_text_user_container;
                   div ~a:[a_class ["container"]]
                     [div ~a:[a_class ["row"]]
-                        [div ~a:[a_class ["col-sm-4"; "zoomedPart"]] [div ~a:[a_class ["well"; "sidebar-nav"]] (List.append insert_part search_part)];
+                        [div ~a:[a_class ["col-sm-4"; "zoomedPart"]] [div ~a:[a_class []] (List.append insert_part search_part)];
                          div ~a:[a_class ["col-sm-8"; "zoomedPart"]] select_part]]] in
   let b = all_body in
   let utf8_meta = meta ~a:[a_charset "utf8"] () in
