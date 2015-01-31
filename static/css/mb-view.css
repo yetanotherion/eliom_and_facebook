@@ -9,8 +9,6 @@ div.zoomedPart {
     -ms-zoom: 0.65;
     -o-zoom: 0.65;
     -webkit-zoom: 0.65;
-    -moz-transform:  scale(0.65);
-    /*-moz-transform-origin: left center;*/
 }
 
 div.hidden { visibility: hidden }
