@@ -1,14 +1,10 @@
-body {
-    padding-top: 60px;
-    padding-bottom: 40px;
-}
-.sidebar-nav {
-    padding: 9px 0;
-}
-
-.db_container {
-    padding-left: 15px;
-    padding-right: 15px;
+div.zoomedPart {
+    zoom: 0.65;
+    -ms-zoom: 0.65;
+    -o-zoom: 0.65;
+    -webkit-zoom: 0.65;
+    -moz-transform:  scale(0.65);
+    /*-moz-transform-origin: left center;*/
 }
 
 div.hidden { visibility: hidden }

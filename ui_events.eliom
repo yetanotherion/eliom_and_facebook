@@ -585,8 +585,7 @@ let rec get_and_record_events t queryo =
   lwt events = %rpc_get_events (make_rpc_get_events_args t queryo ~offset:t.curr_offset)  in
   let () = List.iter (fun x -> Events_store.add t.events_in_db_container x.Utils.url x) events in
   let trs = List.map make_selectable_event events in
-  let db_table = Utils.make_table
- ~additional_class:["db_container"] ["Name"; "Owner"; "Location"; "Date"] trs in
+  let db_table = Utils.make_table ["Name"; "Owner"; "Location"; "Date"] trs in
   lwt other_links = compute_prev_next_handlers events in
   let new_div = [db_table] @ other_links in
   Html5.Manip.replaceChildren t.db_selected_events_div new_div;

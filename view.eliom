@@ -17,16 +17,15 @@ let view_service unused unused2 =
   let selected_events_div_container = div ~a:[a_class ["container"]] [selected_events_div] in
   let reference_event_div = div [] in
   let reference_event_div_container = div ~a:[a_class ["container"]] [reference_event_div] in
-  let demo_text_user_container = div [] in
+  let demo_text_user_container = div ~a:[a_class ["zoomedPart"]] [] in
   let all_users_div = div ~a:[a_class ["hidden"]] [] in
   let legend_div = div [] in
   let play_demo_button = button ~a:[a_class ["hidden"; "btn"; "btn-lg"; "btn-primary"]] ~button_type:`Button [pcdata "Play demo"] in
   let stop_demo_button = button ~a:[a_class ["hidden"; "btn"; "btn-lg"; "btn-primary"]] ~button_type:`Button [pcdata "Stop demo"] in
-  let user_select_ui_div = div ~a:[a_class ["col-md-8"]] [all_users_div;
-                                                       selected_events_div_container;
-                                                       reference_event_div_container;
-                                                       table (tr [td [legend_div]; td [play_demo_button; stop_demo_button]]) [];
-                                                       ] in
+  let select_part = [all_users_div;
+                     selected_events_div_container;
+                     reference_event_div_container;
+                     table (tr [td [legend_div]; td [play_demo_button; stop_demo_button]]) []] in
   let url_input = string_input ~input_type:`Text () in
   let example_queries = div ~a:[a_class ["hidden"]] [pcdata "Some search query examples:";
                                                      ul (List.map (fun x -> li [pcdata x])
@@ -62,13 +61,12 @@ let view_service unused unused2 =
                                            (url_input, [a_class ["active"]]);
                                            (db_selected_events_div, [])] in
   let search_part = List.append search_without_examples [example_queries] in
-  let select_part = user_select_ui_div in
   let all_body = [Utils.fb_root_div;
                   demo_text_user_container;
-                  div ~a:[a_class ["container-fluid"]]
-                    [div ~a:[a_class ["row-fluid"]]
-                        [div ~a:[a_class ["col-md-4"]] [div ~a:[a_class ["well"; "sidebar-nav"]] (List.append insert_part search_part)];
-                         select_part]]] in
+                  div ~a:[a_class ["container"]]
+                    [div ~a:[a_class ["row"]]
+                        [div ~a:[a_class ["col-sm-4"; "zoomedPart"]] [div ~a:[a_class ["well"; "sidebar-nav"]] (List.append insert_part search_part)];
+                         div ~a:[a_class ["col-sm-8"; "zoomedPart"]] select_part]]] in
   let b = all_body in
   let utf8_meta = meta ~a:[a_charset "utf8"] () in
   let viewport_meta = meta ~a:[a_name "viewport";
