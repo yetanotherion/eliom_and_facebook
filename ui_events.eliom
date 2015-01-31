@@ -178,6 +178,7 @@ let make_selectable_event x =
 type attended_type = [`Invited | `Declined | `Attending ]
 type relative_type = [`RelInvited | `RelNotInvited | `RelDeclined | `RelAttending| `AllCurrEvent]
 
+(* that should be factorized *)
 type 'a one_button_to_move =  {
   button_elt: 'a Eliom_content.Html5.elt;
   related_event_id: string;
@@ -189,6 +190,11 @@ type 'a one_legend_button_move = {
   legend_button: 'a Eliom_content.Html5.elt;
   legend_button_type: relative_type;
   legend_elt_on_the_right: 'a Eliom_content.Html5.elt;
+}
+
+type 'a overall_legend = {
+  legend: 'a Eliom_content.Html5.elt;
+  legend_on_the_right: 'a Eliom_content.Html5.elt;
 }
 
 type 'a ui_events = {
@@ -206,7 +212,7 @@ type 'a ui_events = {
   selected_events_div_container: Dom_html.element Js.t;
   selected_events_div: 'a Eliom_content.Html5.elt;
   legend_div: 'a Eliom_content.Html5.elt;
-  mutable div_in_legend_div: 'a Eliom_content.Html5.elt;
+  mutable div_in_legend_div: 'a overall_legend option;
   mutable legend_displayed: bool;
   mutable ref_event: reference_event_resolution_status;
   mutable user_sets: user_sets;
@@ -282,27 +288,35 @@ let create_div_map l f all_buttons =
 let display_legend_div ?force:(f=false) t =
   if not f && t.legend_displayed then ()
   else
-    let all_buttons = ref [] in
-    let legend_info = [(`Attended_ref,
-                        " attended to the reference event,");
-                       (`Declined_ref,
-                        " declined the reference event's invitation,");
-                       (`Invited_ref,
-                        " got invited to the reference event,");
-                       (`Not_invited_ref,
-                        " were not invited to the reference event.")] in
-    let in_legend_div =  flatten
-      [create_div_map [(`All_events,
-                        " Facebook users that attended, declined or were invited to the event. Among these users we have the ones that:")] div all_buttons;
-       [ul (create_div_map legend_info li all_buttons)];
-       [div [pcdata "To understand more about these sets, note that :"]];
-       [div (make_users_inequation all_buttons)]]
+    let create_legend_div () =
+      let all_buttons = ref [] in
+      let legend_info = [(`Attended_ref,
+                          " attended to the reference event,");
+                         (`Declined_ref,
+                          " declined the reference event's invitation,");
+                         (`Invited_ref,
+                          " got invited to the reference event,");
+                         (`Not_invited_ref,
+                          " were not invited to the reference event.")] in
+      let r = flatten
+        [create_div_map [(`All_events,
+                          " Facebook users that attended, declined or were invited to the event. Among these users we have the ones that:")] div all_buttons;
+         [ul (create_div_map legend_info li all_buttons)];
+         [div [pcdata "To understand more about these sets, note that :"]];
+         [div (make_users_inequation all_buttons)]]
+      in
+      r, !all_buttons
     in
-    let div_in_legend_div = div in_legend_div in
-    let () = Html5.Manip.replaceChildren t.legend_div [div_in_legend_div] in
-    t.div_in_legend_div <- div_in_legend_div;
+    let visible, button = create_legend_div () in
+    let not_visible, _ = create_legend_div () in
+    let new_legend = {
+      legend = div visible;
+      legend_on_the_right = div ~a:[a_class ["hidden"]] (not_visible);
+    } in
+    let () = Html5.Manip.replaceChildren t.legend_div [div [new_legend.legend; new_legend.legend_on_the_right]] in
+    t.div_in_legend_div <- Some new_legend;
     t.legend_displayed <- true;
-    t.legend_buttons_to_move <- !all_buttons
+    t.legend_buttons_to_move <- button
 
 
 let create_initial_table header message =
@@ -354,7 +368,7 @@ let create
     selected_events_div_container = Html5.To_dom.of_element selected_events_div;
     selected_events_div = selected_events_div;
     legend_div = legend_div;
-    div_in_legend_div = div [];
+    div_in_legend_div = None;
     legend_displayed = false;
     ref_event = `Undefined;
     user_sets = create_user_sets ();

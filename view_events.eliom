@@ -430,21 +430,28 @@ object (self)
               end
           end
           | [] -> begin
-            let curr_top, curr_left, _, _ = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element t.Ui_events.div_in_legend_div) in
+            let open Ui_events in
+            let div_in_legend_div =
+              match t.div_in_legend_div with
+                | None -> assert(false)
+                | Some x -> x
+            in
+            let curr_top, curr_left, _, _ = Utils.getBoundingClientRectCoordinates (Html5.To_dom.of_element div_in_legend_div.legend) in
+            let () = hidde_elt div_in_legend_div.legend_on_the_right in
             let point = Animation.create_point curr_left curr_top in
             Ui_events.set_demo_text t (Some ("Do you get the idea ? If you forgot the meaning of different user sets, don't worry, the legend is here to help you", initial_style));
-            state <- `Last (Animation.compute_vertical_move point)
+            state <- `Last (div_in_legend_div.legend, Animation.compute_vertical_move point)
           end
       end
-      | `Last l -> begin
+      | `Last (x, l) -> begin
         match l with
           | [] -> begin
             Ui_events.display_legend_div ~force:true t;
             state <- `Stop
           end
           | hd :: tl -> begin
-            Animation.do_move t.Ui_events.div_in_legend_div hd;
-            state <- `Last tl
+            Animation.do_move x hd;
+            state <- `Last (x, tl)
           end
       end
       | `Stop -> ()
