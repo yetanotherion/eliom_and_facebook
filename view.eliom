@@ -80,8 +80,7 @@ let view_service unused unused2 =
            viewport_meta;
            stylesheet] @ js_scripts in
   Lwt.return (Eliom_tools.D.html ~title: "advertise your event"
-                ~css:[["css"; "mb.css"];
-                      ["css"; "mb-view.css"];
+                ~css:[["css"; "mb-view.css"];
                       ["css"; "bubbles.css"]]
                 (body b)
                 ~other_head:h)

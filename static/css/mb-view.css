@@ -1,3 +1,9 @@
+button.hidden {visibility:hidden;}
+
+* {
+    font-family: sans-serif;
+}
+
 div.zoomedPart {
     zoom: 0.65;
     -ms-zoom: 0.65;
