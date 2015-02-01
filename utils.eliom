@@ -57,12 +57,12 @@
                               "rsvp_info"] data
   let cross_size = [a_height 20; a_width 20]
   let make_cross () =
-    img ~src:(uri_of_string (fun () -> "imgs/cross.png"))
+    img ~src:(uri_of_string (fun () -> "imgs/cross.svg"))
       ~a:cross_size
       ~alt:"close" ()
 
   let make_cross_hover () =
-    img ~src:(uri_of_string (fun () -> "imgs/cross_hover.png"))
+    img ~src:(uri_of_string (fun () -> "imgs/cross_hover.svg"))
       ~a:cross_size
       ~alt:"close" ()
 
@@ -234,23 +234,6 @@ function getOffsetRect(elem) {
               Lwt.return_unit
         end
       | false -> Lwt.return_unit
-
-  let get_user_id () =
-    lwt user_ref = %Server_state.rpc_get_user_of_the_session () in
-    match user_ref with
-      | None -> begin
-        lwt () = lwt_autologin () in
-        match_lwt lwt_get_me () with
-          | Fb.Nok _ | Fb.EvData _ | Fb.EvOk _ -> Lwt.fail (Failure "error in getting current profile")
-          | Fb.ProfileOk res -> begin
-            let res = {Server_state.user_id=res.Fb.profile_id;
-                       Server_state.user_name=res.Fb.profile_name;
-                       Server_state.nb_event_added=0} in
-            lwt () = %Server_state.rpc_set_user_of_the_session (Server_state.to_json res) in
-            Lwt.return res
-          end
-        end
-      | Some x -> Lwt.return x
 
   let lwt_api url =
     let url = "v2.0/" ^ url in

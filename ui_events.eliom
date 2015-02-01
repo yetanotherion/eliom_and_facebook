@@ -636,9 +636,9 @@ end
 
 module DragIntoTable (M: DragDestination) = struct
 
-  let make_delete_icon f t url =
-    let cross_hover = [Utils.make_cross_hover ()] in
+  let make_custom_delete_icon () =
     let cross = [Utils.make_cross ()] in
+    let cross_hover = [Utils.make_cross_hover ()] in
     let d = div cross in
     let on_mousovers _ _ =
       let () = Html5.Manip.replaceChildren d cross_hover in
@@ -650,14 +650,21 @@ module DragIntoTable (M: DragDestination) = struct
     in
     let dom_d = Html5.To_dom.of_element d in
     let open Lwt_js_events in
-        let () = async (fun () -> clicks dom_d
-          (fun _ _ ->
-            let () = f t url in
-            Lwt.return_unit))
-        in
-        let () = async (fun () -> mouseovers dom_d on_mousovers) in
-        let () = async (fun () -> mouseouts dom_d on_mouseouts) in
-        d
+    let () = async (fun () -> mouseovers dom_d on_mousovers) in
+    let () = async (fun () -> mouseouts dom_d on_mouseouts) in
+    d
+
+  let make_bootstrap_icon () = div ~a:[a_class ["close"]] [pcdata "x"]
+
+  let make_delete_icon f t url =
+    let d = make_bootstrap_icon () in
+    let dom_d = Html5.To_dom.of_element d in
+    let open Lwt_js_events in
+    let () = async (fun () -> clicks dom_d
+      (fun _ _ ->
+        let () = f t url in
+        Lwt.return_unit)) in
+    d
 
   let rec refresh_events_table t =
     let make_img = make_delete_icon (fun t url ->
