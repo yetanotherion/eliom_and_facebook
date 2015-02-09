@@ -173,7 +173,7 @@ function getOffsetRect(elem) {
   let installSdk () =
     let fjs = List.hd (Dom.list_of_nodeList Html.window##document##getElementsByTagName(Js.string "script")) in
     let js = Html.createScript Html.window##document in
-    js##src <- Js.string "connect.facebook.net/en_US/all.js";
+    js##src <- Js.string "http://connect.facebook.net/en_US/all.js";
     js##id <- jssdk;
     let parentFjs = Js.Opt.get (fjs##parentNode) (fun () -> assert false) in
     Dom.insertBefore parentFjs js (Js.some fjs);
