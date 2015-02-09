@@ -204,7 +204,7 @@ function getOffsetRect(elem) {
 
   let lwt_login () =
     let flogin, fwakener = Lwt.wait () in
-    Fb.login (fun r -> Lwt.wakeup fwakener r);
+    Fb.login (fun r -> Lwt.wakeup fwakener r) {Fb.scope = "public_profile"};
     flogin
 
   let lwt_shouldlogin () =
