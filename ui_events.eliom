@@ -13,12 +13,12 @@ let rpc_get_events = server_function Json.t<(string  option) * int * Int32.t> ge
 
   let user_type_to_icon_file x =
     match x with
-      | `All -> "users.png"
-      | `All_events -> "events_all.png"
-      | `Attended_ref -> "events_ref_attended.png"
-      | `Declined_ref -> "events_ref_declined.png"
-      | `Invited_ref -> "events_ref_invited.png"
-      | `Not_invited_ref -> "events_ref_not_invited.png"
+      | `All -> "users_compressed.png"
+      | `All_events -> "events_all_compressed.png"
+      | `Attended_ref -> "events_ref_attended_compressed.png"
+      | `Declined_ref -> "events_ref_declined_compressed.png"
+      | `Invited_ref -> "events_ref_invited_compressed.png"
+      | `Not_invited_ref -> "events_ref_not_invited_compressed.png"
 
   let create_img_and_hidden_copy user_type attributes =
     let icon = img ~src:(uri_of_string (fun () -> "imgs/" ^ (user_type_to_icon_file user_type))) ~alt:"users" ~a:attributes () in
