@@ -157,7 +157,7 @@ let bootstrap_metas = [utf8_meta;
     fjs
 
   let init () =
-    Fb.init { Fb.appId = "534442833338989";
+    Fb.init { Fb.appId = "<put_your_app_id_here>";
               Fb.cookie = true;
 	      Fb.xfbml = false;
               Fb.version = "v2.0"
@@ -188,7 +188,7 @@ let bootstrap_metas = [utf8_meta;
     let flogin, fwakener = Lwt.wait () in
     let f res =
       match res with
-	| Fb.LoggedInFbAndApp -> Lwt.wakeup fwakener false
+	| Fb.LoggedInFbAndApp _ -> Lwt.wakeup fwakener false
 	| Fb.LoggedInFbOnly | Fb.NotLoggedInFb -> Lwt.wakeup fwakener true
     in
     lwt () = lwt_installSdk () in
