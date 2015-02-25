@@ -77,8 +77,21 @@ let view_service unused unused2 =
   let h = [utf8_meta;
            viewport_meta;
            stylesheet] @ js_scripts in
-  Lwt.return (Eliom_tools.D.html ~title: "advertise your event"
+  Lwt.return (Eliom_tools.D.html ~title: "eliom and facebook"
                 ~css:[["css"; "mb-view.css"];
                       ["css"; "bubbles.css"]]
                 (body b)
                 ~other_head:h)
+
+module Mb_app =
+  Eliom_registration.App (
+    struct
+      let application_name = "mb"
+    end)
+
+
+
+let () =
+  let main_service =
+    Eliom_service.App.service ~path:[] ~get_params:Eliom_parameter.unit () in
+  Mb_app.register ~service:main_service view_service
