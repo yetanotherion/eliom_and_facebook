@@ -239,13 +239,13 @@ let bootstrap_metas = [utf8_meta;
   let get_city event =
     match event.Fb.venue with | None -> "" | Some x -> x.Fb.city
 
-  let print_event event wait_msg_user_containers =
-    let tds = [td [pcdata event.Fb.name];
-               td [pcdata event.Fb.owner.Fb.name];
-               td [pcdata (get_city event)];
-               td [pcdata (epoch_to_light_date (to_epoch event.Fb.start_time))]]
-              @ (List.map (fun x -> td [x]) wait_msg_user_containers) in
-    tr tds
+  let shorten_string ?suffix:(s=None) max_len str  =
+    let len = String.length str in
+    let chosen_len = if len >= max_len then max_len else len in
+    let res = (String.sub str 0 chosen_len) in
+    match s with
+      | None -> res
+      | Some suffix -> res ^ suffix
 
   let substring_after_char string c =
     let next_char_idx = (String.index string c) + 1 in
@@ -340,7 +340,7 @@ let bootstrap_metas = [utf8_meta;
   let replace_event_user_containers event user_containers =
     List.iter (fun (user_container, value) ->
       Html5.Manip.replaceChildren user_container [pcdata value])
-      [(user_containers.event_name_user_container, event.name);
+      [(user_containers.event_name_user_container, shorten_string ~suffix:(Some "...") 40 event.name);
        (user_containers.event_owner_user_container, event.owner);
        (user_containers.event_venue_user_container, event.location);
        (user_containers.event_start_time_user_container, (epoch_to_light_date event.start_date))]

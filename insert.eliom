@@ -70,10 +70,7 @@ let rpc_event_exists =
     nb_invited = List.length invited;
   }
 
-  let shorten_date date_str =
-    let len = String.length date_str in
-    let max = if len >= 16 then 16 else len in
-    String.sub date_str 0 max
+  let shorten_date = Utils.shorten_string 16
 
   let make_event_display_line event attending_user_container declined_user_container invited_user_container =
     Utils.make_tds [pcdata event.Fb.name;
