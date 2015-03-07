@@ -357,7 +357,7 @@ let icon_png_link size = uri_of_string (fun () -> Printf.sprintf "ico/apple-touc
 
 let apple_touch_icon_link size =
     let href_link = icon_png_link size in
-    link ~rel:[`Other "apple-touch-icon-precomposed"] ~a:[a_sizes [size; size]] ~href:href_link ()
+    link ~rel:[`Other "apple-touch-icon-precomposed"] ~a:[a_sizes (`Sizes [(size, size)])] ~href:href_link ()
 
 let touch_icons = List.map apple_touch_icon_link [144; 114; 72]
 

@@ -38,7 +38,7 @@ let view_service unused unused2 =
   let select_part = [all_users_div;
                      selected_events_div_container;
                      reference_event_div_container;
-                     table (tr [td [legend_div]; td [play_demo_button; stop_demo_button]]) []] in
+                     table [tr [td [legend_div]; td [play_demo_button; stop_demo_button]]]] in
   let url_input = string_input ~input_type:`Text () in
   let example_queries = div ~a:[a_class ["hidden"]] [pcdata "Some search query examples:";
                                                      ul (List.map (fun x -> li [pcdata x])
